@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -22,12 +22,13 @@ data class TagSession(
 )
 
 private fun csvEscape(s: String): String {
-    // Safe escaping without relying on String.replace overload resolution
+    // RFC4180-ish: if the field contains a quote, escape it by doubling.
+    // Always wrap in quotes (simple + safe for commas/newlines).
     val out = StringBuilder(s.length + 8)
     for (c in s) {
-        if (c == '"') out.append("""") else out.append(c)
+        if (c == '"') out.append("\"\"") else out.append(c)
     }
-    return ""${out}""
+    return "\"$out\""
 }
 
 object CsvExporter {
