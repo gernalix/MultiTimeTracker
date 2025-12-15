@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
@@ -57,12 +57,14 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     onAddTask = vm::addTask,
                     onAddTag = vm::addTag,
                     onEditTaskTags = vm::updateTaskTags,
+                    onDeleteTask = vm::deleteTask,
                     onExport = vm::exportCsv
                 )
 
                 Tab.TAGS -> TagsScreen(
                     modifier = Modifier.padding(inner),
-                    state = state
+                    state = state,
+                    onDeleteTag = vm::deleteTag
                 )
             }
         }

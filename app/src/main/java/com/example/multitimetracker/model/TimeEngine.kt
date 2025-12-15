@@ -1,7 +1,8 @@
-// v3
+// v4
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
+import com.example.multitimetracker.export.TagSession
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -22,6 +23,7 @@ class TimeEngine {
 
     private val activeTaskStart = mutableMapOf<Long, Long>() // taskId -> startTs
     private val taskSessions = mutableListOf<TaskSession>()
+    private val tagSessions = mutableListOf<TagSession>()
 
     data class EngineResult(
         val tasks: List<Task>,
@@ -111,9 +113,55 @@ class TimeEngine {
 
     fun getTaskSessions(): List<TaskSession> = taskSessions.toList()
 
+    fun getTagSessions(): List<TagSession> = tagSessions.toList()
+
     fun clearSessions() {
         taskSessions.clear()
+        tagSessions.clear()
         activeTaskStart.clear()
+    }
+
+    fun deleteTask(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        taskId: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): EngineResult {
+        val idx = tasks.indexOfFirst { it.id == taskId }
+        if (idx < 0) return EngineResult(tasks, tags)
+
+        val t = tasks[idx]
+        val stopped = if (t.isRunning) stopTask(tasks, tags, t, nowMs) else EngineResult(tasks, tags)
+
+        val newTasks = stopped.tasks.filterNot { it.id == taskId }
+        return EngineResult(newTasks, stopped.tags)
+    }
+
+    fun deleteTag(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        tagId: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): EngineResult {
+        var curTasks = tasks
+        var curTags = tags
+
+        // Rimuove il tag da ogni task; se un task è running, splitta correttamente le sessioni.
+        curTasks.filter { it.tagIds.contains(tagId) }.forEach { task ->
+            val res = reassignTaskTags(
+                tasks = curTasks,
+                tags = curTags,
+                taskId = task.id,
+                newTagIds = task.tagIds - tagId,
+                nowMs = nowMs
+            )
+            curTasks = res.tasks
+            curTags = res.tags
+        }
+
+        // Elimina il tag dalla lista.
+        curTags = curTags.filterNot { it.id == tagId }
+        return EngineResult(curTasks, curTags)
     }
 
     private fun startTask(tasks: List<Task>, tags: List<Tag>, task: Task, nowMs: Long): EngineResult {
@@ -160,7 +208,25 @@ class TimeEngine {
             )
         }
 
-        val newTasks = tasks.map { if (it.id == task.id) newTask else it }
+        
+        // log tag-session per export (attribuisce l'intero intervallo ai tag correnti del task)
+        if (start != null && nowMs > start) {
+            val tagNameById = tags.associate { it.id to it.name }
+            task.tagIds.forEach { tid ->
+                val tname = tagNameById[tid] ?: return@forEach
+                tagSessions.add(
+                    TagSession(
+                        tagId = tid,
+                        tagName = tname,
+                        taskId = task.id,
+                        taskName = task.name,
+                        startTs = start,
+                        endTs = nowMs
+                    )
+                )
+            }
+        }
+val newTasks = tasks.map { if (it.id == task.id) newTask else it }
         val newTags = tags.map { tag ->
             if (!task.tagIds.contains(tag.id)) return@map tag
 

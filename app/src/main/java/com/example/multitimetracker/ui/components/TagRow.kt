@@ -1,4 +1,4 @@
-// v1
+// v2
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -16,7 +20,7 @@ import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.TimeEngine
 
 @Composable
-fun TagRow(tag: Tag, nowMs: Long) {
+fun TagRow(tag: Tag, nowMs: Long, onDelete: () -> Unit) {
     val engine = TimeEngine()
     val shownMs = engine.displayMs(tag.totalMs, tag.lastStartedAtMs, nowMs)
     val running = tag.activeChildrenCount > 0
@@ -33,7 +37,12 @@ fun TagRow(tag: Tag, nowMs: Long) {
                     style = MaterialTheme.typography.labelMedium
                 )
             }
-            Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete tag")
+                }
+            }
         }
     }
 }

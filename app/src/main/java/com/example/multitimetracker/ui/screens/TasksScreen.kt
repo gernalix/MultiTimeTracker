@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.ui.screens
 
 import android.content.Context
@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,10 +47,12 @@ fun TasksScreen(
     onAddTask: (String, Set<Long>) -> Unit,
     onAddTag: (String) -> Unit,
     onEditTaskTags: (Long, Set<Long>) -> Unit,
+    onDeleteTask: (Long) -> Unit,
     onExport: (Context) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
+    var deletingTaskId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
 
     Scaffold(
@@ -86,6 +89,9 @@ fun TasksScreen(
                         IconButton(onClick = { editingTaskId = task.id }) {
                             Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
                         }
+                        IconButton(onClick = { deletingTaskId = task.id }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete task")
+                        }
                     }
                 )
             }
@@ -102,6 +108,29 @@ fun TasksScreen(
                 showAdd = false
             }
         )
+    }
+
+    val delId = deletingTaskId
+    if (delId != null) {
+        val task = state.tasks.firstOrNull { it.id == delId }
+        if (task != null) {
+            AlertDialog(
+                onDismissRequest = { deletingTaskId = null },
+                title = { Text("Elimina task") },
+                text = { Text("Vuoi eliminare '${'$'}{task.name}'?") },
+                confirmButton = {
+                    Button(onClick = {
+                        onDeleteTask(delId)
+                        deletingTaskId = null
+                    }) { Text("Elimina") }
+                },
+                dismissButton = {
+                    Button(onClick = { deletingTaskId = null }) { Text("Annulla") }
+                }
+            )
+        } else {
+            deletingTaskId = null
+        }
     }
 
     val editId = editingTaskId

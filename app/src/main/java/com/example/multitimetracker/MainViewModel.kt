@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker
 
 import android.content.Context
@@ -95,19 +95,54 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun exportCsv(context: Context) {
-        val sessions = engine.getTaskSessions()
-        if (sessions.isEmpty()) {
-            Toast.makeText(context, "Nessuna sessione da esportare (avvia e ferma almeno un task)", Toast.LENGTH_LONG)
-                .show()
+    
+
+    fun deleteTask(taskId: Long) {
+        _state.update { current ->
+            val now = System.currentTimeMillis()
+            val res = engine.deleteTask(
+                tasks = current.tasks,
+                tags = current.tags,
+                taskId = taskId,
+                nowMs = now
+            )
+            current.copy(tasks = res.tasks, tags = res.tags, nowMs = now)
+        }
+    }
+
+    fun deleteTag(tagId: Long) {
+        _state.update { current ->
+            val now = System.currentTimeMillis()
+            val res = engine.deleteTag(
+                tasks = current.tasks,
+                tags = current.tags,
+                tagId = tagId,
+                nowMs = now
+            )
+            current.copy(tasks = res.tasks, tags = res.tags, nowMs = now)
+        }
+    }
+fun exportCsv(context: Context) {
+        val taskSessions = engine.getTaskSessions()
+        val tagSessions = engine.getTagSessions()
+
+        if (taskSessions.isEmpty() && tagSessions.isEmpty()) {
+            Toast.makeText(
+                context,
+                "Nessuna sessione da esportare (avvia e ferma almeno un task)",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 
         val files = listOf(
-            CsvExporter.exportTaskSessions(context, sessions),
-            CsvExporter.exportTaskTotals(context, sessions)
+            CsvExporter.exportTaskSessions(context, taskSessions),
+            CsvExporter.exportTaskTotals(context, taskSessions),
+            CsvExporter.exportTagSessions(context, tagSessions),
+            CsvExporter.exportTagTotals(context, tagSessions)
         )
 
         ShareUtils.shareFiles(context, files, title = "MultiTimeTracker export")
     }
+
 }
