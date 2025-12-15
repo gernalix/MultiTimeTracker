@@ -1,6 +1,7 @@
-// v1
+// v2
 package com.example.multitimetracker.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,8 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.UiState
@@ -44,14 +45,25 @@ fun TasksScreen(
     onToggleTask: (Long) -> Unit,
     onAddTask: (String, Set<Long>) -> Unit,
     onAddTag: (String) -> Unit,
-    onEditTaskTags: (Long, Set<Long>) -> Unit
+    onEditTaskTags: (Long, Set<Long>) -> Unit,
+    onExport: (Context) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
+    val context = LocalContext.current
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { TopAppBar(title = { Text("Tasks") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Tasks") },
+                actions = {
+                    IconButton(onClick = { onExport(context) }) {
+                        Icon(Icons.Filled.Share, contentDescription = "Export CSV")
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAdd = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add task")

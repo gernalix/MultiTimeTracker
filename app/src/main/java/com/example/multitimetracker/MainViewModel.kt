@@ -1,8 +1,12 @@
-// v1
+// v2
 package com.example.multitimetracker
 
+import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.multitimetracker.export.CsvExporter
+import com.example.multitimetracker.export.ShareUtils
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
@@ -89,5 +93,21 @@ class MainViewModel : ViewModel() {
             )
             current.copy(tasks = result.tasks, tags = result.tags, nowMs = now)
         }
+    }
+
+    fun exportCsv(context: Context) {
+        val sessions = engine.getTaskSessions()
+        if (sessions.isEmpty()) {
+            Toast.makeText(context, "Nessuna sessione da esportare (avvia e ferma almeno un task)", Toast.LENGTH_LONG)
+                .show()
+            return
+        }
+
+        val files = listOf(
+            CsvExporter.exportTaskSessions(context, sessions),
+            CsvExporter.exportTaskTotals(context, sessions)
+        )
+
+        ShareUtils.shareFiles(context, files, title = "MultiTimeTracker export")
     }
 }
