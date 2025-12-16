@@ -1,4 +1,4 @@
-// v7
+// v8
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -260,6 +260,7 @@ fun TasksScreen(
 }
 
 @Composable
+@Composable
 private fun TaskHistoryDialog(
     taskName: String,
     isRunning: Boolean,
@@ -268,59 +269,118 @@ private fun TaskHistoryDialog(
     sessions: List<TaskSession>,
     onDismiss: () -> Unit
 ) {
-    val fmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
     val engine = remember { TimeEngine() }
 
-    val ordered = sessions.sortedByDescending { it.startTs }
+    val zone = remember { java.time.ZoneId.systemDefault() }
+    val dayFmt = remember { java.time.format.DateTimeFormatter.ISO_LOCAL_DATE }
+    val timeFmt = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss") }
+
+    fun dayOf(ts: Long): java.time.LocalDate =
+        java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalDate()
+
+    fun timeOf(ts: Long): String =
+        java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalTime().format(timeFmt)
+
+    val ordered = remember(sessions) { sessions.sortedByDescending { it.startTs } }
+    val grouped = remember(ordered) { ordered.groupBy { dayOf(it.startTs) } }
+    val days = remember(grouped) { grouped.keys.sortedDescending() }
+
+    val savedTotal = remember(sessions) {
+        sessions.sumOf { (it.endTs - it.startTs).coerceAtLeast(0L) }
+    }
+    val runningDur = if (isRunning && runningStartTs != null) engine.displayMs(0L, runningStartTs, nowMs) else 0L
+    val grandTotal = savedTotal + runningDur
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Sessioni: $taskName") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                if (isRunning && runningStartTs != null) {
-                    val dur = engine.displayMs(0L, runningStartTs, nowMs)
-                    Text("IN CORSO")
-                    Text("Inizio: ${fmt.format(Date(runningStartTs))}")
-                    Text("Durata: ${formatDuration(dur)}")
-                    HorizontalDivider()
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (grandTotal > 0L) {
+                    Text(
+                        text = "Totale: ${formatDuration(grandTotal)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Inizio")
-                    Text("Fine")
-                    Text("Durata")
-                }
-                HorizontalDivider()
-
-                if (ordered.isEmpty()) {
-                    Text("Nessuna sessione salvata (avvia e ferma almeno una volta).")
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.heightIn(max = 320.dp)
-                    ) {
-                        items(ordered, key = { it.startTs }) { s ->
-                            val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.heightIn(max = 420.dp)
+                ) {
+                    // Running session (pinned on top)
+                    if (isRunning && runningStartTs != null) {
+                        val d = dayOf(runningStartTs)
+                        item(key = "running_header_${'$'}d") {
+                            Text(
+                                text = "📅 ${'$'}{d.format(dayFmt)}",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                        item(key = "running_row") {
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(fmt.format(Date(s.startTs)))
+                                    Text(timeOf(runningStartTs))
                                     Text("→")
-                                    Text(fmt.format(Date(s.endTs)))
+                                    Text("ora")
                                 }
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End
                                 ) {
                                     Text(
-                                        text = "Durata: ${formatDuration(dur)}",
-                                        style = MaterialTheme.typography.bodySmall
+                                        text = "Durata: ${'$'}{formatDuration(runningDur)}  •  IN CORSO",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                     )
                                 }
                             }
+                        }
+                        item { HorizontalDivider() }
+                    }
+
+                    if (ordered.isEmpty()) {
+                        item {
+                            Text("Nessuna sessione salvata (avvia e ferma almeno una volta).")
+                        }
+                    } else {
+                        for (day in days) {
+                            val list = grouped[day].orEmpty()
+                            item(key = "day_${'$'}day") {
+                                Text(
+                                    text = "📅 ${'$'}{day.format(dayFmt)}",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                            items(list, key = { it.startTs }) { s ->
+                                val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(timeOf(s.startTs))
+                                        Text("→")
+                                        Text(timeOf(s.endTs))
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        Text(
+                                            text = "Durata: ${'$'}{formatDuration(dur)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+                            item { HorizontalDivider() }
                         }
                     }
                 }
@@ -329,6 +389,7 @@ private fun TaskHistoryDialog(
         confirmButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
     )
 }
+
 
 @Composable
 private fun AddTaskDialog(
