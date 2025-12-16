@@ -1,10 +1,11 @@
-// v3
+// v4
 package com.example.multitimetracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,29 +70,36 @@ fun TagsScreen(
         }
     }
 
-    // Tag detail: mostra i task RUNNING che alimentano quel tag
+    // Tag detail: mostra TUTTI i task che hanno quel tag (running o in pausa)
     val openId = openedTagId
     if (openId != null) {
         val tag = state.tags.firstOrNull { it.id == openId }
         if (tag != null) {
-            val running = state.tasks
-                .filter { it.isRunning && it.tagIds.contains(openId) }
-                .sortedByDescending { engine.displayMs(it.totalMs, it.lastStartedAtMs, state.nowMs) }
+            val tasksWithTag = state.tasks
+                .filter { it.tagIds.contains(openId) }
+                .sortedWith(
+                    compareByDescending<Task> { it.isRunning }
+                        .thenBy { it.name.lowercase() }
+                )
 
             AlertDialog(
                 onDismissRequest = { openedTagId = null },
                 title = { Text("Tag: ${tag.name}") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        if (running.isEmpty()) {
-                            Text("Nessun task in corso sta alimentando questo tag.")
-                        } else {
-                            Text("Task in corso:")
-                            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items(running, key = { it.id }) { task ->
-                                    val ms = engine.displayMs(task.totalMs, task.lastStartedAtMs, state.nowMs)
-                                    Text("• ${task.name} — ${formatDuration(ms)}")
-                                }
+                        if (tasksWithTag.isEmpty()) {
+                            Text("Nessun task ha questo tag.")
+                            return@Column
+                        }
+
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.heightIn(max = 380.dp)
+                        ) {
+                            items(tasksWithTag, key = { it.id }) { task ->
+                                val ms = engine.displayMs(task.totalMs, task.lastStartedAtMs, state.nowMs)
+                                val dot = if (task.isRunning) "🟢" else "⚪"
+                                Text("$dot ${task.name} — ${formatDuration(ms)}")
                             }
                         }
                     }

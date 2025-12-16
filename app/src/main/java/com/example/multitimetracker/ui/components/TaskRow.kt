@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.clickable
@@ -11,17 +11,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
+import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
 @Composable
 fun TaskRow(
@@ -34,7 +37,7 @@ fun TaskRow(
 ) {
     val engine = TimeEngine()
     val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
-    val tagNames = tags.filter { task.tagIds.contains(it.id) }.map { it.name }
+    val taskTags = tags.filter { task.tagIds.contains(it.id) }
 
     Card(modifier = Modifier.fillMaxWidth().clickable { onOpenHistory() }) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -63,11 +66,17 @@ fun TaskRow(
             Text(formatDuration(shownMs), style = MaterialTheme.typography.headlineSmall)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                tagNames.take(4).forEach { t ->
-                    AssistChip(onClick = { }, label = { Text(t) })
+                taskTags.take(4).forEach { tag ->
+                    val base = remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
+                    val bg = base.copy(alpha = 0.28f)
+                    AssistChip(
+                        onClick = { },
+                        label = { Text(tag.name) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = bg)
+                    )
                 }
-                if (tagNames.size > 4) {
-                    AssistChip(onClick = { }, label = { Text("+${tagNames.size - 4}") })
+                if (taskTags.size > 4) {
+                    AssistChip(onClick = { }, label = { Text("+${taskTags.size - 4}") })
                 }
             }
         }
