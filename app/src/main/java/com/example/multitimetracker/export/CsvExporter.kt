@@ -1,4 +1,4 @@
-// v5
+// v7
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -75,9 +75,17 @@ object CsvExporter {
     }
 
     fun exportTagTotals(context: Context, tagSessions: List<TagSession>): File {
-        val totals = tagSessions
-            .groupBy { it.tagId to it.tagName }
+        // Totale tag = MAX tra i task che lo alimentano (non somma tra task diversi).
+        // 1) somma per (tag, task)
+        val perTask = tagSessions
+            .groupBy { Triple(it.tagId, it.tagName, it.taskId to it.taskName) }
             .mapValues { (_, v) -> v.sumOf { it.endTs - it.startTs } }
+
+        // 2) max per tag
+        val totals = perTask
+            .entries
+            .groupBy({ it.key.first to it.key.second }, { it.value })
+            .mapValues { (_, v) -> v.maxOrNull() ?: 0L }
 
         val file = File(context.getExternalFilesDir(null), "tag_totals.csv")
         FileWriter(file).use { w ->

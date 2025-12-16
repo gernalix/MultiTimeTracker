@@ -1,5 +1,7 @@
-// v1
+// v2
 package com.example.multitimetracker.model
+import com.example.multitimetracker.export.TaskSession
+import com.example.multitimetracker.export.TagSession
 
 data class Task(
     val id: Long,
@@ -21,5 +23,7 @@ data class Tag(
 data class UiState(
     val tasks: List<Task>,
     val tags: List<Tag>,
+    val taskSessions: List<TaskSession>,
+    val tagSessions: List<TagSession>,
     val nowMs: Long
 )

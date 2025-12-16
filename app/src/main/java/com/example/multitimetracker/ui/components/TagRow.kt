@@ -1,41 +1,42 @@
-// v2
+// v3
 package com.example.multitimetracker.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
-import com.example.multitimetracker.model.TimeEngine
 
 @Composable
-fun TagRow(tag: Tag, nowMs: Long, onDelete: () -> Unit) {
-    val engine = TimeEngine()
-    val shownMs = engine.displayMs(tag.totalMs, tag.lastStartedAtMs, nowMs)
-    val running = tag.activeChildrenCount > 0
-
-    Card(modifier = Modifier.fillMaxWidth()) {
+fun TagRow(
+    tag: Tag,
+    shownMs: Long,
+    runningText: String,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onOpen() }) {
         Row(
-            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(14.dp)
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(tag.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    if (running) "In corso • ${tag.activeChildrenCount} task" else "In pausa",
-                    style = MaterialTheme.typography.labelMedium
-                )
+                Text(runningText, style = MaterialTheme.typography.labelMedium)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)

@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker
 
 import android.content.Context
@@ -24,6 +24,8 @@ class MainViewModel : ViewModel() {
         UiState(
             tasks = emptyList(),
             tags = emptyList(),
+            taskSessions = emptyList(),
+            tagSessions = emptyList(),
             nowMs = System.currentTimeMillis()
         )
     )
@@ -31,7 +33,7 @@ class MainViewModel : ViewModel() {
 
     init {
         // Demo data (puoi cancellarlo quando vuoi)
-    val logseq = engine.createTag("Logseq")
+        val logseq = engine.createTag("Logseq")
         val coding = engine.createTag("coding")
         val siti = engine.createTag("siti")
         val faccende = engine.createTag("faccende")
@@ -41,7 +43,12 @@ class MainViewModel : ViewModel() {
         val t3 = engine.createTask("site monitor", setOf(coding.id, siti.id))
 
         _state.update {
-            it.copy(tasks = listOf(t1, t2, t3), tags = listOf(logseq, coding, siti, faccende))
+            it.copy(
+                tasks = listOf(t1, t2, t3),
+                tags = listOf(logseq, coding, siti, faccende),
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions()
+            )
         }
 
         // Tick per aggiornare SOLO la UI (non salva nulla ogni secondo).
@@ -61,7 +68,13 @@ class MainViewModel : ViewModel() {
                 taskId = taskId,
                 nowMs = now
             )
-            current.copy(tasks = result.tasks, tags = result.tags, nowMs = now)
+            current.copy(
+                tasks = result.tasks,
+                tags = result.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
     }
 
@@ -91,7 +104,13 @@ class MainViewModel : ViewModel() {
                 newTagIds = newTagIds,
                 nowMs = now
             )
-            current.copy(tasks = result.tasks, tags = result.tags, nowMs = now)
+            current.copy(
+                tasks = result.tasks,
+                tags = result.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
     }
 
@@ -106,7 +125,13 @@ class MainViewModel : ViewModel() {
                 taskId = taskId,
                 nowMs = now
             )
-            current.copy(tasks = res.tasks, tags = res.tags, nowMs = now)
+            current.copy(
+                tasks = res.tasks,
+                tags = res.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
     }
 
@@ -119,7 +144,13 @@ class MainViewModel : ViewModel() {
                 tagId = tagId,
                 nowMs = now
             )
-            current.copy(tasks = res.tasks, tags = res.tags, nowMs = now)
+            current.copy(
+                tasks = res.tasks,
+                tags = res.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
     }
 fun exportCsv(context: Context) {

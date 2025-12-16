@@ -1,24 +1,29 @@
-// v2
+// v3
 package com.example.multitimetracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.model.Task
+import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TagRow
 
@@ -30,6 +35,10 @@ fun TagsScreen(
     onDeleteTag: (Long) -> Unit
 ) {
     var deletingTagId by remember { mutableStateOf<Long?>(null) }
+    var openedTagId by remember { mutableStateOf<Long?>(null) }
+
+    val engine = remember { TimeEngine() }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text("Tags") }) }
@@ -41,16 +50,62 @@ fun TagsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(state.tags, key = { it.id }) { tag ->
+                val feedingTasks = state.tasks.filter { it.tagIds.contains(tag.id) }
+                val shownMs = feedingTasks.maxOfOrNull {
+                    engine.displayMs(it.totalMs, it.lastStartedAtMs, state.nowMs)
+                } ?: 0L
+
+                val runningCount = feedingTasks.count { it.isRunning }
+                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
+
                 TagRow(
                     tag = tag,
-                    nowMs = state.nowMs,
+                    shownMs = shownMs,
+                    runningText = runningText,
+                    onOpen = { openedTagId = tag.id },
                     onDelete = { deletingTagId = tag.id }
                 )
             }
         }
     }
 
+    // Tag detail: mostra i task RUNNING che alimentano quel tag
+    val openId = openedTagId
+    if (openId != null) {
+        val tag = state.tags.firstOrNull { it.id == openId }
+        if (tag != null) {
+            val running = state.tasks
+                .filter { it.isRunning && it.tagIds.contains(openId) }
+                .sortedByDescending { engine.displayMs(it.totalMs, it.lastStartedAtMs, state.nowMs) }
 
+            AlertDialog(
+                onDismissRequest = { openedTagId = null },
+                title = { Text("Tag: ${tag.name}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        if (running.isEmpty()) {
+                            Text("Nessun task in corso sta alimentando questo tag.")
+                        } else {
+                            Text("Task in corso:")
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(running, key = { it.id }) { task ->
+                                    val ms = engine.displayMs(task.totalMs, task.lastStartedAtMs, state.nowMs)
+                                    Text("• ${task.name} — ${formatDuration(ms)}")
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { openedTagId = null }) { Text("Chiudi") }
+                }
+            )
+        } else {
+            openedTagId = null
+        }
+    }
+
+    // Delete dialog
     val delId = deletingTagId
     if (delId != null) {
         val tag = state.tags.firstOrNull { it.id == delId }
@@ -71,6 +126,17 @@ fun TagsScreen(
                     Button(onClick = { deletingTagId = null }) { Text("Annulla") }
                 }
             )
+        } else {
+            deletingTagId = null
         }
     }
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSec = ms / 1000
+    val sec = totalSec % 60
+    val totalMin = totalSec / 60
+    val min = totalMin % 60
+    val hours = totalMin / 60
+    return "%02d:%02d:%02d".format(hours, min, sec)
 }

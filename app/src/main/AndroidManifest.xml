@@ -1,12 +1,8 @@
 <!-- v3 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Needed to show the persistent notification while tracking (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Foreground service to reduce friction while timers are running -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- API 34+: type-specific permission (targetSdk is high) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application

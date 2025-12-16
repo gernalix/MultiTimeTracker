@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -8,13 +8,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 /**
- * TimeEngine = "motore" puro (quasi) che aggiorna tasks/tags in base a start/stop.
+ * TimeEngine = "motore" puro che gestisce:
+ * - start/stop dei task (TaskSession = da PLAY a STOP)
+ * - sessioni dei tag (TagSession) che iniziano/finiscono quando:
+ *   - il task parte/si ferma
+ *   - un tag viene aggiunto/rimosso mentre il task è running
  *
- * Note:
- * - Il ViewModel mantiene lo stato (liste tasks/tags).
- * - L'engine conserva solo:
- *   - la sequenza di id (per createTask/createTag)
- *   - le sessioni (start/end) per export
+ * Modello timing: NOW - START_TIME (stile timecop)
+ * Quindi il tempo "live" è calcolato, non incrementato in RAM.
  */
 class TimeEngine {
 
@@ -22,6 +23,10 @@ class TimeEngine {
     private var nextTagId: Long = 1L
 
     private val activeTaskStart = mutableMapOf<Long, Long>() // taskId -> startTs
+
+    private data class TagKey(val taskId: Long, val tagId: Long)
+    private val activeTagStart = mutableMapOf<TagKey, Long>() // (taskId, tagId) -> startTs
+
     private val taskSessions = mutableListOf<TaskSession>()
     private val tagSessions = mutableListOf<TagSession>()
 
@@ -81,6 +86,16 @@ class TimeEngine {
         }
     }
 
+    /**
+     * Aggiorna i tag di un task.
+     *
+     * Regole (coerenti):
+     * - se il task NON è running: aggiorna solo la relazione task<tag>
+     * - se il task È running:
+     *   - per ogni tag rimosso: chiude la TagSession (end=now) e decrementa activeChildrenCount del tag
+     *   - per ogni tag aggiunto: apre una nuova TagSession (start=now) e incrementa activeChildrenCount del tag
+     *   - NON chiude la TaskSession (la sessione del task resta da PLAY a STOP)
+     */
     fun reassignTaskTags(
         tasks: List<Task>,
         tags: List<Tag>,
@@ -91,24 +106,22 @@ class TimeEngine {
         val idx = tasks.indexOfFirst { it.id == taskId }
         if (idx < 0) return EngineResult(tasks, tags)
 
-        val t = tasks[idx]
-        // Se il task è running, "chiudiamo" la sessione corrente e la riapriamo con i nuovi tag.
-        val (tasksStopped, tagsStopped) = if (t.isRunning) {
-            val stopped = stopTask(tasks, tags, t, nowMs)
-            stopped.tasks to stopped.tags
-        } else {
-            tasks to tags
+        val task = tasks[idx]
+        val old = task.tagIds
+        val removed = old - newTagIds
+        val added = newTagIds - old
+
+        var newTags = tags
+
+        if (task.isRunning) {
+            removed.forEach { tagId -> newTags = stopTagForTask(task, newTags, tagId, nowMs) }
+            added.forEach { tagId -> newTags = startTagForTask(task, newTags, tagId, nowMs) }
         }
 
-        val updatedTask = tasksStopped[idx].copy(tagIds = newTagIds)
-        val tasksReassigned = tasksStopped.toMutableList().also { it[idx] = updatedTask }.toList()
+        val updatedTask = task.copy(tagIds = newTagIds)
+        val newTasks = tasks.toMutableList().also { it[idx] = updatedTask }.toList()
 
-        return if (t.isRunning) {
-            // riapriamo con stessi millisecondi (splitta correttamente)
-            startTask(tasksReassigned, tagsStopped, updatedTask.copy(isRunning = false, lastStartedAtMs = null), nowMs)
-        } else {
-            EngineResult(tasksReassigned, tagsStopped)
-        }
+        return EngineResult(newTasks, newTags)
     }
 
     fun getTaskSessions(): List<TaskSession> = taskSessions.toList()
@@ -119,6 +132,7 @@ class TimeEngine {
         taskSessions.clear()
         tagSessions.clear()
         activeTaskStart.clear()
+        activeTagStart.clear()
     }
 
     fun deleteTask(
@@ -146,7 +160,7 @@ class TimeEngine {
         var curTasks = tasks
         var curTags = tags
 
-        // Rimuove il tag da ogni task; se un task è running, splitta correttamente le sessioni.
+        // Rimuove il tag da ogni task; se un task è running, chiude le TagSession coerentemente.
         curTasks.filter { it.tagIds.contains(tagId) }.forEach { task ->
             val res = reassignTaskTags(
                 tasks = curTasks,
@@ -172,17 +186,13 @@ class TimeEngine {
             lastStartedAtMs = nowMs
         )
 
-        val newTasks = tasks.map { if (it.id == task.id) newTask else it }
-        val newTags = tags.map { tag ->
-            if (!newTask.tagIds.contains(tag.id)) return@map tag
-
-            val wasRunning = tag.activeChildrenCount > 0
-            tag.copy(
-                activeChildrenCount = tag.activeChildrenCount + 1,
-                lastStartedAtMs = if (!wasRunning) nowMs else tag.lastStartedAtMs
-            )
+        // Avvia tag-session per tutti i tag associati al task in questo momento
+        var newTags = tags
+        newTask.tagIds.forEach { tagId ->
+            newTags = startTagForTask(newTask, newTags, tagId, nowMs)
         }
 
+        val newTasks = tasks.map { if (it.id == task.id) newTask else it }
         return EngineResult(newTasks, newTags)
     }
 
@@ -196,7 +206,7 @@ class TimeEngine {
             lastStartedAtMs = null
         )
 
-        // log session per export
+        // log task-session per export
         if (start != null && nowMs > start) {
             taskSessions.add(
                 TaskSession(
@@ -208,43 +218,50 @@ class TimeEngine {
             )
         }
 
-        
-        // log tag-session per export (attribuisce l'intero intervallo ai tag correnti del task)
-        if (start != null && nowMs > start) {
-            val tagNameById = tags.associate { it.id to it.name }
-            task.tagIds.forEach { tid ->
-                val tname = tagNameById[tid] ?: return@forEach
-                tagSessions.add(
-                    TagSession(
-                        tagId = tid,
-                        tagName = tname,
-                        taskId = task.id,
-                        taskName = task.name,
-                        startTs = start,
-                        endTs = nowMs
-                    )
-                )
-            }
+        // chiudi tutte le tag-session attive per questo task
+        var newTags = tags
+        task.tagIds.forEach { tagId ->
+            newTags = stopTagForTask(task, newTags, tagId, nowMs)
         }
-val newTasks = tasks.map { if (it.id == task.id) newTask else it }
-        val newTags = tags.map { tag ->
-            if (!task.tagIds.contains(tag.id)) return@map tag
 
-            val newCount = (tag.activeChildrenCount - 1).coerceAtLeast(0)
-            val tagDelta = if (tag.lastStartedAtMs != null && nowMs > tag.lastStartedAtMs) {
-                // attributo l'intero delta ai tag correnti del task.
-                // Nota: se più task con lo stesso tag sono running, questo modello semplifica.
-                // Va bene per la demo/primissima versione.
-                if (newCount == 0) nowMs - tag.lastStartedAtMs else 0L
-            } else 0L
+        val newTasks = tasks.map { if (it.id == task.id) newTask else it }
+        return EngineResult(newTasks, newTags)
+    }
 
-            tag.copy(
-                activeChildrenCount = newCount,
-                totalMs = tag.totalMs + tagDelta,
-                lastStartedAtMs = if (newCount == 0) null else tag.lastStartedAtMs
+    private fun startTagForTask(task: Task, tags: List<Tag>, tagId: Long, nowMs: Long): List<Tag> {
+        val key = TagKey(taskId = task.id, tagId = tagId)
+        if (activeTagStart.containsKey(key)) return tags // già attivo
+
+        activeTagStart[key] = nowMs
+
+        return tags.map { tag ->
+            if (tag.id != tagId) return@map tag
+            tag.copy(activeChildrenCount = tag.activeChildrenCount + 1)
+        }
+    }
+
+    private fun stopTagForTask(task: Task, tags: List<Tag>, tagId: Long, nowMs: Long): List<Tag> {
+        val key = TagKey(taskId = task.id, tagId = tagId)
+        val start = activeTagStart.remove(key) ?: return tags
+
+        if (nowMs > start) {
+            val tagNameById = tags.associate { it.id to it.name }
+            val tagName = tagNameById[tagId] ?: ""
+            tagSessions.add(
+                TagSession(
+                    tagId = tagId,
+                    tagName = tagName,
+                    taskId = task.id,
+                    taskName = task.name,
+                    startTs = start,
+                    endTs = nowMs
+                )
             )
         }
 
-        return EngineResult(newTasks, newTags)
+        return tags.map { tag ->
+            if (tag.id != tagId) return@map tag
+            tag.copy(activeChildrenCount = (tag.activeChildrenCount - 1).coerceAtLeast(0))
+        }
     }
 }

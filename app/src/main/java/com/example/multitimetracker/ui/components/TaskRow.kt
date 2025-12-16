@@ -1,6 +1,7 @@
-// v1
+// v2
 package com.example.multitimetracker.ui.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,13 +29,14 @@ fun TaskRow(
     tags: List<Tag>,
     nowMs: Long,
     onToggle: () -> Unit,
+    onOpenHistory: () -> Unit,
     trailing: @Composable () -> Unit
 ) {
     val engine = TimeEngine()
     val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
     val tagNames = tags.filter { task.tagIds.contains(it.id) }.map { it.name }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().clickable { onOpenHistory() }) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

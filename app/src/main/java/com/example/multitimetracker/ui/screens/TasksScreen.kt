@@ -1,7 +1,8 @@
-// v3
+// v4
 package com.example.multitimetracker.ui.screens
 
 import android.content.Context
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,12 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -27,16 +29,24 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.example.multitimetracker.export.TaskSession
+import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TaskRow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,7 +63,27 @@ fun TasksScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var deletingTaskId by remember { mutableStateOf<Long?>(null) }
+    var openedTaskId by remember { mutableStateOf<Long?>(null) }
+
+    var query by remember { mutableStateOf("") }
+    var selectedTagFilters by remember { mutableStateOf(setOf<Long>()) }
+
     val context = LocalContext.current
+    val engine = remember { TimeEngine() }
+
+    val filteredTasks = state.tasks.filter { task ->
+        val q = query.trim()
+        val matchesQuery =
+            q.isBlank() ||
+                task.name.contains(q, ignoreCase = true) ||
+                state.tags.filter { task.tagIds.contains(it.id) }.any { it.name.contains(q, ignoreCase = true) }
+
+        val matchesTags =
+            selectedTagFilters.isEmpty() ||
+                selectedTagFilters.all { task.tagIds.contains(it) }
+
+        matchesQuery && matchesTags
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -73,31 +103,75 @@ fun TasksScreen(
             }
         }
     ) { inner ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(state.tasks, key = { it.id }) { task ->
-                TaskRow(
-                    task = task,
-                    tags = state.tags,
-                    nowMs = state.nowMs,
-                    onToggle = { onToggleTask(task.id) },
-                    trailing = {
-                        IconButton(onClick = { editingTaskId = task.id }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
-                        }
-                        IconButton(onClick = { deletingTaskId = task.id }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete task")
-                        }
+            // Search
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Ricerca task o tag") },
+                singleLine = true,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .fillMaxWidth()
+            )
+
+            // Tag filters
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (state.tags.isEmpty()) {
+                    AssistChip(onClick = { }, label = { Text("Nessun tag") })
+                } else {
+                    state.tags.forEach { tag ->
+                        val selected = selectedTagFilters.contains(tag.id)
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                selectedTagFilters =
+                                    if (selected) selectedTagFilters - tag.id else selectedTagFilters + tag.id
+                            },
+                            label = { Text(tag.name) }
+                        )
                     }
-                )
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(filteredTasks, key = { it.id }) { task ->
+                    TaskRow(
+                        task = task,
+                        tags = state.tags,
+                        nowMs = state.nowMs,
+                        onToggle = { onToggleTask(task.id) },
+                        onOpenHistory = { openedTaskId = task.id },
+                        trailing = {
+                            IconButton(onClick = { editingTaskId = task.id }) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
+                            }
+                            IconButton(onClick = { deletingTaskId = task.id }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete task")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 
+    // Add task
     if (showAdd) {
         AddTaskDialog(
             tags = state.tags,
@@ -110,6 +184,25 @@ fun TasksScreen(
         )
     }
 
+    // Task history
+    val openId = openedTaskId
+    if (openId != null) {
+        val task = state.tasks.firstOrNull { it.id == openId }
+        if (task != null) {
+            TaskHistoryDialog(
+                taskName = task.name,
+                isRunning = task.isRunning,
+                runningStartTs = task.lastStartedAtMs,
+                nowMs = state.nowMs,
+                sessions = state.taskSessions.filter { it.taskId == openId },
+                onDismiss = { openedTaskId = null }
+            )
+        } else {
+            openedTaskId = null
+        }
+    }
+
+    // Delete task
     val delId = deletingTaskId
     if (delId != null) {
         val task = state.tasks.firstOrNull { it.id == delId }
@@ -117,7 +210,7 @@ fun TasksScreen(
             AlertDialog(
                 onDismissRequest = { deletingTaskId = null },
                 title = { Text("Elimina task") },
-                text = { Text("Vuoi eliminare '${'$'}{task.name}'?") },
+                text = { Text("Vuoi eliminare '${task.name}'?") },
                 confirmButton = {
                     Button(onClick = {
                         onDeleteTask(delId)
@@ -133,6 +226,7 @@ fun TasksScreen(
         }
     }
 
+    // Edit tags
     val editId = editingTaskId
     if (editId != null) {
         val task = state.tasks.firstOrNull { it.id == editId }
@@ -152,8 +246,47 @@ fun TasksScreen(
 }
 
 @Composable
+private fun TaskHistoryDialog(
+    taskName: String,
+    isRunning: Boolean,
+    runningStartTs: Long?,
+    nowMs: Long,
+    sessions: List<TaskSession>,
+    onDismiss: () -> Unit
+) {
+    val fmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
+    val engine = remember { TimeEngine() }
+
+    val ordered = sessions.sortedByDescending { it.startTs }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sessioni: $taskName") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                if (isRunning && runningStartTs != null) {
+                    val dur = engine.displayMs(0L, runningStartTs, nowMs)
+                    Text("• IN CORSO — da ${fmt.format(Date(runningStartTs))} — ${formatDuration(dur)}")
+                }
+                if (ordered.isEmpty()) {
+                    Text("Nessuna sessione salvata (avvia e ferma almeno una volta).")
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(ordered, key = { it.startTs }) { s ->
+                            val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
+                            Text("• ${fmt.format(Date(s.startTs))} → ${fmt.format(Date(s.endTs))} — ${formatDuration(dur)}")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
+    )
+}
+
+@Composable
 private fun AddTaskDialog(
-    tags: List<com.example.multitimetracker.model.Tag>,
+    tags: List<Tag>,
     onDismiss: () -> Unit,
     onAddTag: (String) -> Unit,
     onConfirm: (String, Set<Long>) -> Unit
@@ -222,7 +355,7 @@ private fun AddTaskDialog(
 @Composable
 private fun EditTagsDialog(
     title: String,
-    tags: List<com.example.multitimetracker.model.Tag>,
+    tags: List<Tag>,
     initialSelection: Set<Long>,
     onDismiss: () -> Unit,
     onConfirm: (Set<Long>) -> Unit
@@ -246,7 +379,7 @@ private fun EditTagsDialog(
                     }
                 }
                 Spacer(modifier = Modifier.padding(2.dp))
-                Text("Nota: se il task è in corso, aggiungere/rimuovere tag aggiorna i timer dei tag in tempo reale.")
+                Text("Nota: se il task è in corso, aggiungere/rimuovere tag non ferma il task: apre/chiude solo le sessioni del tag.")
             }
         },
         confirmButton = {
@@ -256,4 +389,13 @@ private fun EditTagsDialog(
             Button(onClick = onDismiss) { Text("Chiudi") }
         }
     )
+}
+
+private fun formatDuration(ms: Long): String {
+    val totalSec = ms / 1000
+    val sec = totalSec % 60
+    val totalMin = totalSec / 60
+    val min = totalMin % 60
+    val hours = totalMin / 60
+    return "%02d:%02d:%02d".format(hours, min, sec)
 }

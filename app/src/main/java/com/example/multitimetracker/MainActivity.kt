@@ -2,69 +2,73 @@
 package com.example.multitimetracker
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Bundle
 import android.os.Build
+import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.multitimetracker.ui.AppRoot
 import com.example.multitimetracker.ui.theme.MultiTimeTrackerTheme
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-
-    private val vm: MainViewModel by viewModels()
-
-    private val requestPostNotifications = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* no-op */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // Android 13+: without this, notifications (including foreground service) may be hidden.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                requestPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-
-        // Keep the app warm ONLY while at least one task is running.
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                vm.state.collect { s ->
-                    val running = s.tasks.count { it.isRunning }
-                    if (running > 0) {
-                        TrackingForegroundService.startIfNeeded(this@MainActivity)
-                    } else {
-                        TrackingForegroundService.stopIfRunning(this@MainActivity)
-                    }
-                }
-            }
-        }
-
         setContent {
             MultiTimeTrackerTheme {
-                MultiTimeTrackerApp(vm)
+                MultiTimeTrackerApp()
             }
         }
     }
 }
 
 @Composable
-private fun MultiTimeTrackerApp(vm: MainViewModel) {
+private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
+    val context = LocalContext.current
+    val state by vm.state.collectAsState()
+
+    val permissionGranted = remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        permissionGranted.value = granted
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && !permissionGranted.value) {
+            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Foreground service "solo mentre traccio"
+    val runningCount = state.tasks.count { it.isRunning }
+    LaunchedEffect(runningCount, permissionGranted.value) {
+        val svc = Intent(context, TrackingForegroundService::class.java)
+        if (runningCount > 0 && permissionGranted.value) {
+            ContextCompat.startForegroundService(context, svc)
+        } else {
+            context.stopService(svc)
+        }
+    }
+
     AppRoot(vm = vm)
 }
