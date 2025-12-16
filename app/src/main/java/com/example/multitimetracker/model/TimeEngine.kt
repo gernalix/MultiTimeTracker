@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -127,6 +127,33 @@ class TimeEngine {
     fun getTaskSessions(): List<TaskSession> = taskSessions.toList()
 
     fun getTagSessions(): List<TagSession> = tagSessions.toList()
+
+    /**
+     * Carica uno snapshot importato (tipicamente da CSV) sostituendo tutto lo stato volatile.
+     *
+     * Nota: l'app al momento non persiste su DB, quindi questo è il modo più semplice per
+     * ripristinare tasks/tags/sessioni dopo reinstallazione.
+     */
+    fun loadImportedSnapshot(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        importedTaskSessions: List<TaskSession>,
+        importedTagSessions: List<TagSession>
+    ) {
+        // reset runtime
+        activeTaskStart.clear()
+        activeTagStart.clear()
+
+        // reset sessions
+        taskSessions.clear()
+        taskSessions.addAll(importedTaskSessions)
+        tagSessions.clear()
+        tagSessions.addAll(importedTagSessions)
+
+        // update id generators so that new entities won't collide
+        nextTaskId = (tasks.maxOfOrNull { it.id } ?: 0L) + 1L
+        nextTagId = (tags.maxOfOrNull { it.id } ?: 0L) + 1L
+    }
 
     fun clearSessions() {
         taskSessions.clear()

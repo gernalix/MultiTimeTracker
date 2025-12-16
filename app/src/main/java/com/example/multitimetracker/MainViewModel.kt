@@ -1,11 +1,13 @@
-// v5
+// v6
 package com.example.multitimetracker
 
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.multitimetracker.export.CsvExporter
+import com.example.multitimetracker.export.CsvImporter
 import com.example.multitimetracker.export.ShareUtils
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
@@ -182,6 +184,44 @@ fun exportCsv(context: Context) {
         )
 
         ShareUtils.shareFiles(context, files, title = "MultiTimeTracker export")
+    }
+
+    fun importCsv(context: Context, uris: List<Uri>) {
+        viewModelScope.launch {
+            try {
+                val snapshot = CsvImporter.importFromUris(context, uris)
+
+                // load snapshot into engine so that future exports work
+                engine.loadImportedSnapshot(
+                    tasks = snapshot.tasks,
+                    tags = snapshot.tags,
+                    importedTaskSessions = snapshot.taskSessions,
+                    importedTagSessions = snapshot.tagSessions
+                )
+
+                _state.update {
+                    it.copy(
+                        tasks = snapshot.tasks,
+                        tags = snapshot.tags,
+                        taskSessions = snapshot.taskSessions,
+                        tagSessions = snapshot.tagSessions,
+                        nowMs = System.currentTimeMillis()
+                    )
+                }
+
+                Toast.makeText(
+                    context,
+                    "Import completato: ${snapshot.tasks.size} task, ${snapshot.tags.size} tag",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Import fallito: ${e.message ?: e::class.java.simpleName}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
 }

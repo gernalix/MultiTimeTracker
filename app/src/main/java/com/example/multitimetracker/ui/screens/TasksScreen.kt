@@ -3,6 +3,9 @@ package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -67,7 +71,8 @@ fun TasksScreen(
     onAddTag: (String) -> Unit,
     onEditTaskTags: (Long, Set<Long>) -> Unit,
     onDeleteTask: (Long) -> Unit,
-    onExport: (Context) -> Unit
+    onExport: (Context) -> Unit,
+    onImport: (Context, List<Uri>) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
@@ -79,6 +84,14 @@ fun TasksScreen(
 
     val context = LocalContext.current
     val engine = remember { TimeEngine() }
+
+    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) onImport(context, uris)
+    }
 
     val filteredTasks = state.tasks.filter { task ->
         val q = query.trim()
@@ -94,14 +107,15 @@ fun TasksScreen(
         matchesQuery && matchesTags
     }
 
-    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("Tasks") },
                 actions = {
+                    IconButton(onClick = { importLauncher.launch(arrayOf("text/csv", "text/*", "application/octet-stream")) }) {
+                        Icon(Icons.Filled.FileOpen, contentDescription = "Import CSV")
+                    }
                     IconButton(onClick = { onExport(context) }) {
                         Icon(Icons.Filled.Share, contentDescription = "Export CSV")
                     }
@@ -143,7 +157,7 @@ fun TasksScreen(
                 } else {
                     state.tags.forEach { tag ->
                         val selected = selectedTagFilters.contains(tag.id)
-                        val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
+                        val base = remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
                         val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
                         FilterChip(
                             selected = selected,
@@ -274,6 +288,8 @@ private fun TaskHistoryDialog(
 ) {
     val engine = remember { TimeEngine() }
 
+    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
+
     val zone = remember { java.time.ZoneId.systemDefault() }
     val dayFmt = remember { java.time.format.DateTimeFormatter.ISO_LOCAL_DATE }
     val timeFmt = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss") }
@@ -316,7 +332,7 @@ private fun TaskHistoryDialog(
                     // Running session (pinned on top)
                     if (isRunning && runningStartTs != null) {
                         val d = dayOf(runningStartTs)
-                        item(key = "running_header_${'$'}d") {
+                        item(key = "running_header_${d}") {
                             Text(
                                 text = "📅 ${d.format(dayFmt)}",
                                 style = MaterialTheme.typography.labelLarge
@@ -354,7 +370,7 @@ private fun TaskHistoryDialog(
                     } else {
                         for (day in days) {
                             val list = grouped[day].orEmpty()
-                            item(key = "day_${'$'}day") {
+                            item(key = "day_${day}") {
                                 Text(
                                     text = "📅 ${day.format(dayFmt)}",
                                     style = MaterialTheme.typography.labelLarge
