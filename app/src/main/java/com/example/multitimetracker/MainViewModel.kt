@@ -31,7 +31,7 @@ class MainViewModel : ViewModel() {
 
     init {
         // Demo data (puoi cancellarlo quando vuoi)
-        val logseq = engine.createTag("Logseq")
+    val logseq = engine.createTag("Logseq")
         val coding = engine.createTag("coding")
         val siti = engine.createTag("siti")
         val faccende = engine.createTag("faccende")
