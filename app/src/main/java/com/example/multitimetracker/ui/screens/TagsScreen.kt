@@ -1,6 +1,8 @@
-// v5
+// v7
 package com.example.multitimetracker.ui.screens
+import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
+import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -49,6 +51,8 @@ fun TagsScreen(
 
     val engine = remember { TimeEngine() }
 
+    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = { TopAppBar(title = { Text("Tags") }) },
@@ -74,6 +78,7 @@ fun TagsScreen(
                 val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
 
                 TagRow(
+                    color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
                     tag = tag,
                     shownMs = shownMs,
                     runningText = runningText,

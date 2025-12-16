@@ -1,4 +1,4 @@
-// v9
+// v11
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -52,6 +52,7 @@ import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TaskRow
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
+import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,6 +93,8 @@ fun TasksScreen(
 
         matchesQuery && matchesTags
     }
+
+    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -140,7 +143,7 @@ fun TasksScreen(
                 } else {
                     state.tags.forEach { tag ->
                         val selected = selectedTagFilters.contains(tag.id)
-                        val base = remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
+                        val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
                         val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
                         FilterChip(
                             selected = selected,
@@ -166,6 +169,7 @@ fun TasksScreen(
             ) {
                 items(filteredTasks, key = { it.id }) { task ->
                     TaskRow(
+                        tagColors = tagColors,
                         task = task,
                         tags = state.tags,
                         nowMs = state.nowMs,
@@ -314,7 +318,7 @@ private fun TaskHistoryDialog(
                         val d = dayOf(runningStartTs)
                         item(key = "running_header_${'$'}d") {
                             Text(
-                                text = "📅 ${'$'}{d.format(dayFmt)}",
+                                text = "📅 ${d.format(dayFmt)}",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -333,7 +337,7 @@ private fun TaskHistoryDialog(
                                     horizontalArrangement = Arrangement.End
                                 ) {
                                     Text(
-                                        text = "Durata: ${'$'}{formatDuration(runningDur)}  •  IN CORSO",
+                                        text = "Durata: ${formatDuration(runningDur)}  •  IN CORSO",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                     )
@@ -352,7 +356,7 @@ private fun TaskHistoryDialog(
                             val list = grouped[day].orEmpty()
                             item(key = "day_${'$'}day") {
                                 Text(
-                                    text = "📅 ${'$'}{day.format(dayFmt)}",
+                                    text = "📅 ${day.format(dayFmt)}",
                                     style = MaterialTheme.typography.labelLarge
                                 )
                             }
@@ -372,7 +376,7 @@ private fun TaskHistoryDialog(
                                         horizontalArrangement = Arrangement.End
                                     ) {
                                         Text(
-                                            text = "Durata: ${'$'}{formatDuration(dur)}",
+                                            text = "Durata: ${formatDuration(dur)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                                         )

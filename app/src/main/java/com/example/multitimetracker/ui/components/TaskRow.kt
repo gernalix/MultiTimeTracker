@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.clickable
@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
 @Composable
 fun TaskRow(
+    tagColors: Map<Long, Color>,
     task: Task,
     tags: List<Tag>,
     nowMs: Long,
@@ -67,7 +69,7 @@ fun TaskRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 taskTags.take(4).forEach { tag ->
-                    val base = remember(tag.name) { tagColorFromSeed(tag.name) }
+                    val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
                     val bg = base.copy(alpha = 0.35f)
                     AssistChip(
                         onClick = { },
