@@ -1,4 +1,4 @@
-// v5
+// v6
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -178,6 +178,19 @@ class TimeEngine {
         return EngineResult(curTasks, curTags)
     }
 
+
+
+    fun renameTag(
+        tags: List<Tag>,
+        tagId: Long,
+        newName: String
+    ): List<Tag> {
+        val n = newName.trim()
+        if (n.isEmpty()) return tags
+        return tags.map { tag ->
+            if (tag.id == tagId) tag.copy(name = n) else tag
+        }
+    }
     private fun startTask(tasks: List<Task>, tags: List<Tag>, task: Task, nowMs: Long): EngineResult {
         activeTaskStart[task.id] = nowMs
 

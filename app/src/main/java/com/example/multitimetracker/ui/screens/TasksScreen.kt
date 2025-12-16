@@ -1,5 +1,6 @@
-// v6
+// v7
 package com.example.multitimetracker.ui.screens
+import androidx.compose.material3.MaterialTheme
 
 import android.content.Context
 import androidx.compose.foundation.horizontalScroll
@@ -44,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.TimeEngine
@@ -300,10 +302,24 @@ private fun TaskHistoryDialog(
                     ) {
                         items(ordered, key = { it.startTs }) { s ->
                             val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(fmt.format(Date(s.startTs)))
-                                Text(fmt.format(Date(s.endTs)))
-                                Text(formatDuration(dur))
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(fmt.format(Date(s.startTs)))
+                                    Text("→")
+                                    Text(fmt.format(Date(s.endTs)))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    Text(
+                                        text = "Durata: ${formatDuration(dur)}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
                     }
@@ -396,20 +412,31 @@ private fun EditTagsDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                tags.forEach { tag ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(tag.name)
-                        Checkbox(
-                            checked = selected.contains(tag.id),
-                            onCheckedChange = { checked ->
-                                selected = if (checked) selected + tag.id else selected - tag.id
-                            }
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(tags, key = { it.id }) { tag ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(tag.name)
+                            Checkbox(
+                                checked = selected.contains(tag.id),
+                                onCheckedChange = { checked ->
+                                    selected = if (checked) selected + tag.id else selected - tag.id
+                                }
+                            )
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.padding(2.dp))
-                Text("Nota: se il task è in corso, aggiungere/rimuovere tag non ferma il task: apre/chiude solo le sessioni del tag.")
+                Text(
+                    "Nota: se il task è in corso, aggiungere/rimuovere tag non ferma il task: apre/chiude solo le sessioni del tag.",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         },
         confirmButton = {

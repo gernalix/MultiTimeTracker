@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.clickable
@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +26,7 @@ fun TagRow(
     shownMs: Long,
     runningText: String,
     onOpen: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth().clickable { onOpen() }) {
@@ -40,6 +42,9 @@ fun TagRow(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit tag")
+                }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Filled.Delete, contentDescription = "Delete tag")
                 }

@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker
 
 import android.content.Context
@@ -93,6 +93,14 @@ class MainViewModel : ViewModel() {
             current.copy(tags = current.tags + tag)
         }
     }
+
+    fun renameTag(tagId: Long, newName: String) {
+        if (newName.isBlank()) return
+        _state.update { current ->
+            current.copy(tags = engine.renameTag(current.tags, tagId, newName))
+        }
+    }
+
 
     fun updateTaskTags(taskId: Long, newTagIds: Set<Long>) {
         _state.update { current ->

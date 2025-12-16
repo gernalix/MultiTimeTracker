@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.clickable
@@ -67,8 +67,8 @@ fun TaskRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 taskTags.take(4).forEach { tag ->
-                    val base = remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
-                    val bg = base.copy(alpha = 0.28f)
+                    val base = remember(tag.name) { tagColorFromSeed(tag.name) }
+                    val bg = base.copy(alpha = 0.35f)
                     AssistChip(
                         onClick = { },
                         label = { Text(tag.name) },

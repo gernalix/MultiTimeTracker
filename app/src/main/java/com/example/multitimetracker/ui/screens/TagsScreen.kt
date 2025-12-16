@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
@@ -9,9 +9,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -33,16 +38,25 @@ import com.example.multitimetracker.ui.components.TagRow
 fun TagsScreen(
     modifier: Modifier,
     state: UiState,
+    onAddTag: (String) -> Unit,
+    onRenameTag: (Long, String) -> Unit,
     onDeleteTag: (Long) -> Unit
 ) {
     var deletingTagId by remember { mutableStateOf<Long?>(null) }
     var openedTagId by remember { mutableStateOf<Long?>(null) }
+    var editingTagId by remember { mutableStateOf<Long?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
 
     val engine = remember { TimeEngine() }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { TopAppBar(title = { Text("Tags") }) }
+        topBar = { TopAppBar(title = { Text("Tags") }) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Add tag")
+            }
+        }
     ) { inner ->
         LazyColumn(
             modifier = Modifier
@@ -64,9 +78,44 @@ fun TagsScreen(
                     shownMs = shownMs,
                     runningText = runningText,
                     onOpen = { openedTagId = tag.id },
+                    onEdit = { editingTagId = tag.id },
                     onDelete = { deletingTagId = tag.id }
                 )
             }
+        }
+    }
+
+    // Add tag
+    if (showAdd) {
+        AddOrRenameTagDialog(
+            title = "Nuovo tag",
+            initialName = "",
+            confirmText = "Crea",
+            onDismiss = { showAdd = false },
+            onConfirm = { name ->
+                onAddTag(name)
+                showAdd = false
+            }
+        )
+    }
+
+    // Rename tag
+    val editId = editingTagId
+    if (editId != null) {
+        val tag = state.tags.firstOrNull { it.id == editId }
+        if (tag != null) {
+            AddOrRenameTagDialog(
+                title = "Modifica tag",
+                initialName = tag.name,
+                confirmText = "Salva",
+                onDismiss = { editingTagId = null },
+                onConfirm = { newName ->
+                    onRenameTag(editId, newName)
+                    editingTagId = null
+                }
+            )
+        } else {
+            editingTagId = null
         }
     }
 
@@ -138,6 +187,38 @@ fun TagsScreen(
             deletingTagId = null
         }
     }
+}
+
+@Composable
+private fun AddOrRenameTagDialog(
+    title: String,
+    initialName: String,
+    confirmText: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nome tag") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                val n = name.trim()
+                if (n.isNotEmpty()) onConfirm(n)
+            }) { Text(confirmText) }
+        },
+        dismissButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
+    )
 }
 
 private fun formatDuration(ms: Long): String {
