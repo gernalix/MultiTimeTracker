@@ -1,4 +1,4 @@
-// v8
+// v9
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -260,7 +260,6 @@ fun TasksScreen(
 }
 
 @Composable
-@Composable
 private fun TaskHistoryDialog(
     taskName: String,
     isRunning: Boolean,
@@ -389,7 +388,6 @@ private fun TaskHistoryDialog(
         confirmButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
     )
 }
-
 
 @Composable
 private fun AddTaskDialog(
