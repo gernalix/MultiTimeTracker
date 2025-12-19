@@ -1,4 +1,4 @@
-// v14
+// v15
 package com.example.multitimetracker
 
 import android.content.Context
@@ -361,7 +361,7 @@ class MainViewModel : ViewModel() {
                 nowMs = now
             )
             val updated = current.copy(
-                tasks = tasksWithLink,
+                tasks = result.tasks,
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
