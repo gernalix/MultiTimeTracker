@@ -4,7 +4,7 @@ package com.example.multitimetracker.export
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.documentfile.provider.DocumentFile
+import androidx.documentfile.provider.DocumentFile.provider.DocumentFile
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 
