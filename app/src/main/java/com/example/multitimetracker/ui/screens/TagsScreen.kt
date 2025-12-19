@@ -1,4 +1,4 @@
-// v7
+// v8
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -70,9 +70,10 @@ fun TagsScreen(
         ) {
             items(state.tags, key = { it.id }) { tag ->
                 val feedingTasks = state.tasks.filter { it.tagIds.contains(tag.id) }
-                val shownMs = feedingTasks.maxOfOrNull {
+                // Totale tag = SUM di tutti i task che hanno questo tag.
+                val shownMs = feedingTasks.sumOf {
                     engine.displayMs(it.totalMs, it.lastStartedAtMs, state.nowMs)
-                } ?: 0L
+                }
 
                 val runningCount = feedingTasks.count { it.isRunning }
                 val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"

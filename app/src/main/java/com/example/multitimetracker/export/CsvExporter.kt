@@ -1,9 +1,11 @@
-// v7
+// v8
 package com.example.multitimetracker.export
 
 import android.content.Context
+import androidx.documentfile.provider.DocumentFile
 import java.io.File
 import java.io.FileWriter
+import java.io.OutputStreamWriter
 
 data class TaskSession(
     val taskId: Long,
@@ -32,6 +34,75 @@ private fun csvEscape(s: String): String {
 }
 
 object CsvExporter {
+
+    /**
+     * Writes CSV content to a file inside a SAF directory (DocumentFile).
+     * Uses a truncate write ("wt") so the result is always coherent.
+     */
+    private fun writeCsvToDir(context: Context, dir: DocumentFile, fileName: String, writeBody: (Appendable) -> Unit) {
+        val cr = context.contentResolver
+        val existing = dir.findFile(fileName)
+        val target = existing ?: dir.createFile("text/csv", fileName)
+        requireNotNull(target) { "Impossibile creare file: $fileName" }
+
+        cr.openOutputStream(target.uri, "wt").use { out ->
+            requireNotNull(out) { "Impossibile aprire output stream per: $fileName" }
+            OutputStreamWriter(out, Charsets.UTF_8).use { w ->
+                writeBody(w)
+                w.flush()
+            }
+        }
+    }
+
+    /**
+     * Full export into a directory called from automatic backup/import flows.
+     */
+    fun exportAllToDirectory(context: Context, dir: DocumentFile, taskSessions: List<TaskSession>, tagSessions: List<TagSession>) {
+        writeCsvToDir(context, dir, "sessions.csv") { w ->
+            w.appendLine("task_id,task_name,start_ts,end_ts")
+            taskSessions.forEach { s ->
+                w.appendLine("${s.taskId},${csvEscape(s.taskName)},${s.startTs},${s.endTs}")
+            }
+        }
+
+        writeCsvToDir(context, dir, "totals.csv") { w ->
+            val totals = taskSessions
+                .groupBy { it.taskId to it.taskName }
+                .mapValues { (_, v) -> v.sumOf { it.endTs - it.startTs } }
+            w.appendLine("task_id,task_name,total_ms")
+            totals.forEach { (k, total) ->
+                w.appendLine("${k.first},${csvEscape(k.second)},$total")
+            }
+        }
+
+        writeCsvToDir(context, dir, "tag_sessions.csv") { w ->
+            w.appendLine("tag_id,tag_name,task_id,task_name,start_ts,end_ts")
+            tagSessions.forEach { s ->
+                w.appendLine(
+                    "${s.tagId},${csvEscape(s.tagName)}," +
+                        "${s.taskId},${csvEscape(s.taskName)}," +
+                        "${s.startTs},${s.endTs}"
+                )
+            }
+        }
+
+        writeCsvToDir(context, dir, "tag_totals.csv") { w ->
+            // Totale tag = SUM dei totali dei task che lo alimentano.
+            val perTask = tagSessions
+                .groupBy { Triple(it.tagId, it.tagName, it.taskId to it.taskName) }
+                .mapValues { (_, v) -> v.sumOf { it.endTs - it.startTs } }
+
+            val totals = perTask
+                .entries
+                .groupBy({ it.key.first to it.key.second }, { it.value })
+                .mapValues { (_, v) -> v.sumOf { it } }
+
+            w.appendLine("tag_id,tag_name,total_ms")
+            totals.forEach { (k, total) ->
+                w.appendLine("${k.first},${csvEscape(k.second)},$total")
+            }
+        }
+    }
 
     fun exportTaskSessions(context: Context, sessions: List<TaskSession>): File {
         val file = File(context.getExternalFilesDir(null), "sessions.csv")
@@ -75,17 +146,17 @@ object CsvExporter {
     }
 
     fun exportTagTotals(context: Context, tagSessions: List<TagSession>): File {
-        // Totale tag = MAX tra i task che lo alimentano (non somma tra task diversi).
+        // Totale tag = SUM tra i task che lo alimentano.
         // 1) somma per (tag, task)
         val perTask = tagSessions
             .groupBy { Triple(it.tagId, it.tagName, it.taskId to it.taskName) }
             .mapValues { (_, v) -> v.sumOf { it.endTs - it.startTs } }
 
-        // 2) max per tag
+        // 2) sum per tag
         val totals = perTask
             .entries
             .groupBy({ it.key.first to it.key.second }, { it.value })
-            .mapValues { (_, v) -> v.maxOrNull() ?: 0L }
+            .mapValues { (_, v) -> v.sumOf { it } }
 
         val file = File(context.getExternalFilesDir(null), "tag_totals.csv")
         FileWriter(file).use { w ->

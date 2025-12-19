@@ -1,9 +1,8 @@
-// v12
+// v13
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
 import android.content.Context
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -51,12 +50,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import com.example.multitimetracker.export.TaskSession
+import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TaskRow
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
+import com.example.multitimetracker.export.BackupFolderStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,7 +73,8 @@ fun TasksScreen(
     onEditTaskTags: (Long, Set<Long>) -> Unit,
     onDeleteTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
-    onImport: (Context, List<Uri>) -> Unit
+    onImport: (Context) -> Unit,
+    onSetBackupRootFolder: (Context, android.net.Uri) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
@@ -87,10 +89,16 @@ fun TasksScreen(
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        if (uris.isNotEmpty()) onImport(context, uris)
+    var pendingAfterFolderPick by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    val treeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            onSetBackupRootFolder(context, treeUri)
+            pendingAfterFolderPick?.invoke()
+            pendingAfterFolderPick = null
+        }
     }
 
     val filteredTasks = state.tasks.filter { task ->
@@ -113,11 +121,26 @@ fun TasksScreen(
             TopAppBar(
                 title = { Text("Tasks") },
                 actions = {
-                    IconButton(onClick = { importLauncher.launch(arrayOf("text/csv", "text/*", "application/octet-stream")) }) {
-                        Icon(Icons.Filled.FileOpen, contentDescription = "Import CSV")
+                    IconButton(onClick = {
+                        // If backup folder not configured yet, ask once for a root folder.
+                        if (BackupFolderStore.getTreeUri(context) == null) {
+                            pendingAfterFolderPick = { onImport(context) }
+                            treeLauncher.launch(null)
+                        } else {
+                            onImport(context)
+                        }
+                    }) {
+                        Icon(Icons.Filled.FileOpen, contentDescription = "Import")
                     }
-                    IconButton(onClick = { onExport(context) }) {
-                        Icon(Icons.Filled.Share, contentDescription = "Export CSV")
+                    IconButton(onClick = {
+                        if (BackupFolderStore.getTreeUri(context) == null) {
+                            pendingAfterFolderPick = { onExport(context) }
+                            treeLauncher.launch(null)
+                        } else {
+                            onExport(context)
+                        }
+                    }) {
+                        Icon(Icons.Filled.Share, contentDescription = "Export")
                     }
                 }
             )
@@ -157,7 +180,7 @@ fun TasksScreen(
                 } else {
                     state.tags.forEach { tag ->
                         val selected = selectedTagFilters.contains(tag.id)
-                        val base = remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
+                        val base = tagColors[tag.id] ?: tagColorFromSeed(tag.name)
                         val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
                         FilterChip(
                             selected = selected,

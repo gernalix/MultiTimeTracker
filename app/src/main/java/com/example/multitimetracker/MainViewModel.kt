@@ -1,11 +1,13 @@
-// v7
+// v8
 package com.example.multitimetracker
 
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.export.CsvExporter
 import com.example.multitimetracker.export.CsvImporter
 import com.example.multitimetracker.export.ShareUtils
@@ -17,6 +19,8 @@ import com.example.multitimetracker.persistence.SnapshotStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainViewModel : ViewModel() {
@@ -25,6 +29,10 @@ class MainViewModel : ViewModel() {
 
     private var appContext: Context? = null
     private var initialized = false
+
+    // Debounced auto-backup to SAF folder (MultiTimer data).
+    private var autoBackupJob: Job? = null
+    private var lastBackupSignature: String? = null
 
     private val _state = MutableStateFlow(
         UiState(
@@ -98,6 +106,7 @@ class MainViewModel : ViewModel() {
             )
         }
         persist()
+        scheduleAutoBackup()
     }
 
     private fun persist() {
@@ -115,6 +124,119 @@ class MainViewModel : ViewModel() {
                 SnapshotStore.ActiveTag(taskId = taskId, tagId = tagId, startTs = startTs)
             }
         )
+    }
+
+    private fun computeBackupSignature(): String {
+        // Cheap signature to skip redundant exports.
+        val ts = engine.getTaskSessions()
+        val tgs = engine.getTagSessions()
+        val lastTask = ts.maxOfOrNull { it.endTs } ?: 0L
+        val lastTag = tgs.maxOfOrNull { it.endTs } ?: 0L
+        return "${ts.size}|${tgs.size}|$lastTask|$lastTag"
+    }
+
+    private fun scheduleAutoBackup() {
+        val ctx = appContext ?: return
+        // Auto-backup only if the user has configured a tree URI.
+        if (BackupFolderStore.getTreeUri(ctx) == null) return
+
+        autoBackupJob?.cancel()
+        autoBackupJob = viewModelScope.launch {
+            // Small debounce to coalesce rapid start/pause taps.
+            delay(1200)
+            runCatching {
+                val sig = computeBackupSignature()
+                if (sig == lastBackupSignature) return@runCatching
+
+                val dir = BackupFolderStore.getOrCreateDataDir(ctx)
+                CsvExporter.exportAllToDirectory(
+                    context = ctx,
+                    dir = dir,
+                    taskSessions = engine.getTaskSessions(),
+                    tagSessions = engine.getTagSessions()
+                )
+                lastBackupSignature = sig
+            }
+        }
+    }
+
+    /**
+     * Called from UI after the user picks a folder (OpenDocumentTree).
+     * Persists the permission and creates/uses the "MultiTimer data" subfolder.
+     */
+    fun setBackupRootFolder(context: Context, treeUri: Uri) {
+        // Persist permission for future sessions.
+        val flags = (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(treeUri, flags)
+        }
+        BackupFolderStore.saveTreeUri(context, treeUri)
+
+        runCatching {
+            BackupFolderStore.getOrCreateDataDir(context)
+        }.onFailure {
+            Toast.makeText(context, "Errore cartella backup: ${it.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun exportBackup(context: Context) {
+        val taskSessions = engine.getTaskSessions()
+        val tagSessions = engine.getTagSessions()
+
+        if (taskSessions.isEmpty() && tagSessions.isEmpty()) {
+            Toast.makeText(
+                context,
+                "Nessuna sessione da esportare (avvia e ferma almeno un task)",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        try {
+            val dir = BackupFolderStore.getOrCreateDataDir(context)
+            CsvExporter.exportAllToDirectory(context, dir, taskSessions, tagSessions)
+            lastBackupSignature = computeBackupSignature()
+            Toast.makeText(context, "Export completato in '${dir.name ?: "MultiTimer data"}'", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Export fallito: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun importBackup(context: Context) {
+        viewModelScope.launch {
+            try {
+                val dir = BackupFolderStore.getOrCreateDataDir(context)
+                val snapshot = CsvImporter.importFromBackupFolder(context, dir)
+
+                engine.loadImportedSnapshot(
+                    tasks = snapshot.tasks,
+                    tags = snapshot.tags,
+                    importedTaskSessions = snapshot.taskSessions,
+                    importedTagSessions = snapshot.tagSessions
+                )
+
+                _state.update {
+                    it.copy(
+                        tasks = snapshot.tasks,
+                        tags = snapshot.tags,
+                        taskSessions = snapshot.taskSessions,
+                        tagSessions = snapshot.tagSessions,
+                        nowMs = System.currentTimeMillis()
+                    )
+                }
+                persist()
+                lastBackupSignature = computeBackupSignature()
+
+                Toast.makeText(
+                    context,
+                    "Import completato: ${snapshot.tasks.size} task, ${snapshot.tags.size} tag",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Import fallito: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     fun toggleTask(taskId: Long) {
@@ -136,6 +258,7 @@ class MainViewModel : ViewModel() {
             updated
         }
         persist()
+        scheduleAutoBackup()
     }
 
     fun addTask(name: String, tagIds: Set<Long>) {
@@ -145,6 +268,7 @@ class MainViewModel : ViewModel() {
             current.copy(tasks = current.tasks + task)
         }
         persist()
+        scheduleAutoBackup()
     }
 
     fun addTag(name: String) {
@@ -154,6 +278,7 @@ class MainViewModel : ViewModel() {
             current.copy(tags = current.tags + tag)
         }
         persist()
+        scheduleAutoBackup()
     }
 
     fun renameTag(tagId: Long, newName: String) {
@@ -162,6 +287,7 @@ class MainViewModel : ViewModel() {
             current.copy(tags = engine.renameTag(current.tags, tagId, newName))
         }
         persist()
+        scheduleAutoBackup()
     }
 
 
@@ -185,6 +311,7 @@ class MainViewModel : ViewModel() {
             updated
         }
         persist()
+        scheduleAutoBackup()
     }
 
     
@@ -208,6 +335,7 @@ class MainViewModel : ViewModel() {
             updated
         }
         persist()
+        scheduleAutoBackup()
     }
 
     fun deleteTag(tagId: Long) {
@@ -229,6 +357,7 @@ class MainViewModel : ViewModel() {
             updated
         }
         persist()
+        scheduleAutoBackup()
     }
 fun exportCsv(context: Context) {
         val taskSessions = engine.getTaskSessions()
@@ -278,6 +407,7 @@ fun exportCsv(context: Context) {
 
                 // Persist immediately so that reopening the app keeps the imported state.
                 persist()
+                scheduleAutoBackup()
 
                 Toast.makeText(
                     context,

@@ -1,9 +1,10 @@
-// v1
+// v2
 package com.example.multitimetracker.export
 
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.documentfile.provider.DocumentFile
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 
@@ -37,7 +38,24 @@ object CsvImporter {
 
         val taskSessions = parseTaskSessions(readLines(context, taskSessionsCsv))
         val tagSessions = parseTagSessions(readLines(context, tagSessionsCsv))
+        return buildSnapshot(taskSessions, tagSessions)
+    }
 
+    /**
+     * Import directly from the persistent backup folder (MultiTimer data) without any file picker.
+     */
+    fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapshot {
+        val taskSessionsDoc = dir.findFile("sessions.csv")
+            ?: throw IllegalArgumentException("Manca sessions.csv in '${dir.name ?: "backup"}'")
+        val tagSessionsDoc = dir.findFile("tag_sessions.csv")
+            ?: throw IllegalArgumentException("Manca tag_sessions.csv in '${dir.name ?: "backup"}'")
+
+        val taskSessions = parseTaskSessions(readLines(context, taskSessionsDoc.uri))
+        val tagSessions = parseTagSessions(readLines(context, tagSessionsDoc.uri))
+        return buildSnapshot(taskSessions, tagSessions)
+    }
+
+    private fun buildSnapshot(taskSessions: List<TaskSession>, tagSessions: List<TagSession>): ImportedSnapshot {
         // Rebuild tags
         val tagsById = linkedMapOf<Long, String>()
         tagSessions.forEach { s ->

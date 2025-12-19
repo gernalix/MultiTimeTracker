@@ -58,8 +58,9 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     onAddTag = vm::addTag,
                     onEditTaskTags = vm::updateTaskTags,
                     onDeleteTask = vm::deleteTask,
-                    onExport = vm::exportCsv,
-                    onImport = vm::importCsv
+                    onExport = vm::exportBackup,
+                    onImport = vm::importBackup,
+                    onSetBackupRootFolder = vm::setBackupRootFolder
                 )
 
                 Tab.TAGS -> TagsScreen(
