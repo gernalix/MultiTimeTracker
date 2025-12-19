@@ -208,9 +208,8 @@ object CsvImporter {
             val o = tagsJson.optJSONObject(i) ?: continue
             val id = o.optLong("id", Long.MIN_VALUE)
             val name = o.optString("name", "").trim()
+            val link = o.optString("link", "").trim()
             if (id == Long.MIN_VALUE || name.isBlank()) continue
-
-            val taskLink = o.optString("link", "").trim()
             tags.add(
                 Tag(
                     id = id,
@@ -228,6 +227,7 @@ object CsvImporter {
             val o = tasksJson.optJSONObject(i) ?: continue
             val id = o.optLong("id", Long.MIN_VALUE)
             val name = o.optString("name", "").trim()
+            val taskLink = o.optString("link", "").trim()
             if (id == Long.MIN_VALUE || name.isBlank()) continue
 
             val tagIdsJson = o.optJSONArray("tagIds")

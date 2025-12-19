@@ -94,7 +94,6 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
-                o.put("link", t.link)
                 tagsArr.put(o)
             }
             root.put("tags", tagsArr)
@@ -104,6 +103,7 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
+                o.put("link", t.link)
                 val tagIdsArr = JSONArray()
                 t.tagIds.sorted().forEach { tagIdsArr.put(it) }
                 o.put("tagIds", tagIdsArr)
