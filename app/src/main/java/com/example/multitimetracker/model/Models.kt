@@ -1,4 +1,4 @@
-// v4
+// v3
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -6,7 +6,6 @@ import com.example.multitimetracker.export.TagSession
 data class Task(
     val id: Long,
     val name: String,
-    val link: String,
     val tagIds: Set<Long>,
     val isRunning: Boolean,
     val totalMs: Long,
@@ -21,17 +20,11 @@ data class Tag(
     val lastStartedAtMs: Long? // null se non sta correndo
 )
 
-data class ActiveTag(
-    val taskId: Long,
-    val tagId: Long,
-    val startTs: Long
-)
-
 data class UiState(
     val tasks: List<Task>,
     val tags: List<Tag>,
     val taskSessions: List<TaskSession>,
     val tagSessions: List<TagSession>,
-    val activeTagStart: List<ActiveTag>,
+    val activeTagStart: Map<Long, Long> = emptyMap(),
     val nowMs: Long
 )

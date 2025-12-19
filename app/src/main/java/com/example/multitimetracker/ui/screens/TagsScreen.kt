@@ -1,4 +1,4 @@
-// v11
+// v9
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -31,9 +31,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
-import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.model.TimeEngine
+import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TagRow
+
+private data class Interval(val start: Long, val end: Long)
+
+/**
+ * Unione cronologica degli intervalli: somma le durate senza doppio conteggio delle sovrapposizioni.
+ */
+private fun unionDurationMs(intervals: List<Interval>): Long {
+    if (intervals.isEmpty()) return 0L
+    val sorted = intervals.sortedWith(compareBy<Interval> { it.start }.thenBy { it.end })
+    var curStart = sorted[0].start
+    var curEnd = sorted[0].end
+    var total = 0L
+    for (i in 1 until sorted.size) {
+        val itv = sorted[i]
+        if (itv.start <= curEnd) {
+            // overlap / touch
+            if (itv.end > curEnd) curEnd = itv.end
+        } else {
+            total += (curEnd - curStart).coerceAtLeast(0L)
+            curStart = itv.start
+            curEnd = itv.end
+        }
+    }
+    total += (curEnd - curStart).coerceAtLeast(0L)
+    return total
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +74,7 @@ fun TagsScreen(
     var openedTagId by remember { mutableStateOf<Long?>(null) }
     var editingTagId by remember { mutableStateOf<Long?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+
     val engine = remember { TimeEngine() }
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
@@ -68,23 +95,24 @@ fun TagsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(state.tags, key = { it.id }) { tag ->
+                // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
+                // (le sovrapposizioni contano una sola volta)
                 val feedingTasks = state.tasks.filter { it.tagIds.contains(tag.id) }
-                // Totale tag = UNION cronologica delle sessioni dei task figli (overlap conta una volta).
-                val intervals = mutableListOf<Pair<Long, Long>>()
+                val feedingTaskIds = feedingTasks.map { it.id }.toSet()
 
-                // Sessioni chiuse
-                state.tagSessions
+                val closedIntervals = state.taskSessions
                     .asSequence()
-                    .filter { it.tagId == tag.id }
-                    .forEach { intervals.add(it.startTs to it.endTs) }
+                    .filter { feedingTaskIds.contains(it.taskId) }
+                    .map { Interval(it.startTs, it.endTs) }
+                    .toList()
 
-                // Sessioni ancora aperte (task/tag running)
-                state.activeTagStart
+                val openIntervals = feedingTasks
                     .asSequence()
-                    .filter { it.tagId == tag.id }
-                    .forEach { intervals.add(it.startTs to state.nowMs) }
+                    .filter { it.isRunning && it.lastStartedAtMs != null }
+                    .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
+                    .toList()
 
-                val shownMs = unionDurationMs(intervals)
+                val shownMs = unionDurationMs(closedIntervals + openIntervals)
 
                 val runningCount = feedingTasks.count { it.isRunning }
                 val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
@@ -236,30 +264,6 @@ private fun AddOrRenameTagDialog(
         },
         dismissButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
     )
-}
-
-
-private fun unionDurationMs(intervals: List<Pair<Long, Long>>): Long {
-    if (intervals.isEmpty()) return 0L
-    val sorted = intervals.filter { it.second > it.first }.sortedBy { it.first }
-    if (sorted.isEmpty()) return 0L
-
-    var curStart = sorted[0].first
-    var curEnd = sorted[0].second
-    var total = 0L
-
-    for (i in 1 until sorted.size) {
-        val (s, e) = sorted[i]
-        if (s <= curEnd) {
-            if (e > curEnd) curEnd = e
-        } else {
-            total += (curEnd - curStart)
-            curStart = s
-            curEnd = e
-        }
-    }
-    total += (curEnd - curStart)
-    return total
 }
 
 private fun formatDuration(ms: Long): String {

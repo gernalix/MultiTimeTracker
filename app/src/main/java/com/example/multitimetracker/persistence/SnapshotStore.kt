@@ -6,7 +6,6 @@ import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
-import com.example.multitimetracker.model.ActiveTag
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -53,8 +52,7 @@ object SnapshotStore {
                     JSONObject()
                         .put("id", t.id)
                         .put("name", t.name)
-                        .put("link", t.link)
-                        .put("tagIds", JSONArray().apply { t.tagIds.forEach { this.put(it) } })
+.put("tagIds", JSONArray().apply { t.tagIds.forEach { put(it) } })
                         .put("isRunning", t.isRunning)
                         .put("totalMs", t.totalMs)
                         .put("lastStartedAtMs", t.lastStartedAtMs)
@@ -179,8 +177,7 @@ object SnapshotStore {
             out.add(
                 Task(
                     id = o.getLong("id"),
-                    name = o.getString("name"),
-                    link = o.optString("link", ""),
+                    name = o.getString("name"), ""),
                     tagIds = tagIds,
                     isRunning = o.getBoolean("isRunning"),
                     totalMs = o.getLong("totalMs"),
