@@ -1,4 +1,4 @@
-// v7
+// v8
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -29,6 +29,11 @@ class TimeEngine {
 
     private val taskSessions = mutableListOf<TaskSession>()
     private val tagSessions = mutableListOf<TagSession>()
+
+    data class RuntimeSnapshot(
+        val activeTaskStart: Map<Long, Long>,
+        val activeTagStart: List<Triple<Long, Long, Long>>
+    )
 
     data class EngineResult(
         val tasks: List<Task>,
@@ -127,6 +132,45 @@ class TimeEngine {
     fun getTaskSessions(): List<TaskSession> = taskSessions.toList()
 
     fun getTagSessions(): List<TagSession> = tagSessions.toList()
+
+    fun exportRuntimeSnapshot(): RuntimeSnapshot {
+        val activeTags = activeTagStart.entries.map { (k, startTs) ->
+            Triple(k.taskId, k.tagId, startTs)
+        }
+        return RuntimeSnapshot(
+            activeTaskStart = activeTaskStart.toMap(),
+            activeTagStart = activeTags
+        )
+    }
+
+    /**
+     * Restores all volatile runtime structures needed to correctly STOP running items after process death.
+     *
+     * IMPORTANT: callers must also restore tasks/tags lists in the ViewModel.
+     */
+    fun importRuntimeSnapshot(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        taskSessionsSnapshot: List<TaskSession>,
+        tagSessionsSnapshot: List<TagSession>,
+        snapshot: RuntimeSnapshot
+    ) {
+        activeTaskStart.clear()
+        activeTaskStart.putAll(snapshot.activeTaskStart)
+
+        activeTagStart.clear()
+        snapshot.activeTagStart.forEach { (taskId, tagId, startTs) ->
+            activeTagStart[TagKey(taskId = taskId, tagId = tagId)] = startTs
+        }
+
+        taskSessions.clear()
+        taskSessions.addAll(taskSessionsSnapshot)
+        tagSessions.clear()
+        tagSessions.addAll(tagSessionsSnapshot)
+
+        nextTaskId = (tasks.maxOfOrNull { it.id } ?: 0L) + 1L
+        nextTagId = (tags.maxOfOrNull { it.id } ?: 0L) + 1L
+    }
 
     /**
      * Carica uno snapshot importato (tipicamente da CSV) sostituendo tutto lo stato volatile.

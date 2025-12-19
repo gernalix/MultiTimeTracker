@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -287,8 +287,6 @@ private fun TaskHistoryDialog(
     onDismiss: () -> Unit
 ) {
     val engine = remember { TimeEngine() }
-
-    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
     val zone = remember { java.time.ZoneId.systemDefault() }
     val dayFmt = remember { java.time.format.DateTimeFormatter.ISO_LOCAL_DATE }

@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker
 
 import android.content.Context
@@ -13,6 +13,7 @@ import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
+import com.example.multitimetracker.persistence.SnapshotStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -21,6 +22,9 @@ import kotlinx.coroutines.launch
 class MainViewModel : ViewModel() {
 
     private val engine = TimeEngine()
+
+    private var appContext: Context? = null
+    private var initialized = false
 
     private val _state = MutableStateFlow(
         UiState(
@@ -34,7 +38,48 @@ class MainViewModel : ViewModel() {
     val state: StateFlow<UiState> = _state
 
     init {
-        // Demo data (puoi cancellarlo quando vuoi)
+        // Tick per aggiornare SOLO la UI (non salva nulla ogni secondo).
+        viewModelScope.launch {
+            engine.uiTickerFlow().collect { now ->
+                _state.update { it.copy(nowMs = now) }
+            }
+        }
+    }
+
+    /**
+     * Must be called once at app start (MainActivity does this).
+     * Restores persisted snapshot and AUTO-RESUMES any running tasks after process death.
+     */
+    fun initialize(context: Context) {
+        if (initialized) return
+        initialized = true
+        appContext = context.applicationContext
+
+        val snap = SnapshotStore.load(context)
+        if (snap != null) {
+            engine.importRuntimeSnapshot(
+                tasks = snap.tasks,
+                tags = snap.tags,
+                taskSessionsSnapshot = snap.taskSessions,
+                tagSessionsSnapshot = snap.tagSessions,
+                snapshot = TimeEngine.RuntimeSnapshot(
+                    activeTaskStart = snap.activeTaskStart,
+                    activeTagStart = snap.activeTagStart.map { Triple(it.taskId, it.tagId, it.startTs) }
+                )
+            )
+            _state.update {
+                it.copy(
+                    tasks = snap.tasks,
+                    tags = snap.tags,
+                    taskSessions = snap.taskSessions,
+                    tagSessions = snap.tagSessions,
+                    nowMs = System.currentTimeMillis()
+                )
+            }
+            return
+        }
+
+        // Fallback: demo data (puoi cancellarlo quando vuoi)
         val logseq = engine.createTag("Logseq")
         val coding = engine.createTag("coding")
         val siti = engine.createTag("siti")
@@ -52,13 +97,24 @@ class MainViewModel : ViewModel() {
                 tagSessions = engine.getTagSessions()
             )
         }
+        persist()
+    }
 
-        // Tick per aggiornare SOLO la UI (non salva nulla ogni secondo).
-        viewModelScope.launch {
-            engine.uiTickerFlow().collect { now ->
-                _state.update { it.copy(nowMs = now) }
+    private fun persist() {
+        val ctx = appContext ?: return
+        val cur = _state.value
+        val runtime = engine.exportRuntimeSnapshot()
+        SnapshotStore.save(
+            context = ctx,
+            tasks = cur.tasks,
+            tags = cur.tags,
+            taskSessions = cur.taskSessions,
+            tagSessions = cur.tagSessions,
+            activeTaskStart = runtime.activeTaskStart,
+            activeTagStart = runtime.activeTagStart.map { (taskId, tagId, startTs) ->
+                SnapshotStore.ActiveTag(taskId = taskId, tagId = tagId, startTs = startTs)
             }
-        }
+        )
     }
 
     fun toggleTask(taskId: Long) {
@@ -70,14 +126,16 @@ class MainViewModel : ViewModel() {
                 taskId = taskId,
                 nowMs = now
             )
-            current.copy(
+            val updated = current.copy(
                 tasks = result.tasks,
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
                 nowMs = now
             )
+            updated
         }
+        persist()
     }
 
     fun addTask(name: String, tagIds: Set<Long>) {
@@ -86,6 +144,7 @@ class MainViewModel : ViewModel() {
             val task = engine.createTask(name.trim(), tagIds)
             current.copy(tasks = current.tasks + task)
         }
+        persist()
     }
 
     fun addTag(name: String) {
@@ -94,6 +153,7 @@ class MainViewModel : ViewModel() {
             val tag = engine.createTag(name.trim())
             current.copy(tags = current.tags + tag)
         }
+        persist()
     }
 
     fun renameTag(tagId: Long, newName: String) {
@@ -101,6 +161,7 @@ class MainViewModel : ViewModel() {
         _state.update { current ->
             current.copy(tags = engine.renameTag(current.tags, tagId, newName))
         }
+        persist()
     }
 
 
@@ -114,14 +175,16 @@ class MainViewModel : ViewModel() {
                 newTagIds = newTagIds,
                 nowMs = now
             )
-            current.copy(
+            val updated = current.copy(
                 tasks = result.tasks,
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
                 nowMs = now
             )
+            updated
         }
+        persist()
     }
 
     
@@ -135,14 +198,16 @@ class MainViewModel : ViewModel() {
                 taskId = taskId,
                 nowMs = now
             )
-            current.copy(
+            val updated = current.copy(
                 tasks = res.tasks,
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
                 nowMs = now
             )
+            updated
         }
+        persist()
     }
 
     fun deleteTag(tagId: Long) {
@@ -154,14 +219,16 @@ class MainViewModel : ViewModel() {
                 tagId = tagId,
                 nowMs = now
             )
-            current.copy(
+            val updated = current.copy(
                 tasks = res.tasks,
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
                 nowMs = now
             )
+            updated
         }
+        persist()
     }
 fun exportCsv(context: Context) {
         val taskSessions = engine.getTaskSessions()
@@ -208,6 +275,9 @@ fun exportCsv(context: Context) {
                         nowMs = System.currentTimeMillis()
                     )
                 }
+
+                // Persist immediately so that reopening the app keeps the imported state.
+                persist()
 
                 Toast.makeText(
                     context,

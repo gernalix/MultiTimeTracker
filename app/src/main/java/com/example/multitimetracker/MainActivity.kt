@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker
 
 import android.Manifest
@@ -54,6 +54,8 @@ private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
     }
 
     LaunchedEffect(Unit) {
+        // Restore persisted state (and auto-resume running timers) as soon as the UI starts.
+        vm.initialize(context)
         if (Build.VERSION.SDK_INT >= 33 && !permissionGranted.value) {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
