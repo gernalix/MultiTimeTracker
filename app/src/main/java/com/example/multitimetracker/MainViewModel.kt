@@ -1,4 +1,4 @@
-// v10
+// v11
 package com.example.multitimetracker
 
 import android.content.Context
@@ -29,6 +29,16 @@ class MainViewModel : ViewModel() {
 
     private var appContext: Context? = null
     private var initialized = false
+
+    /**
+     * Allows MainActivity to provide an application context before the main initialize()
+     * (useful for first-run setup/import flows).
+     */
+    fun bindContext(context: Context) {
+        if (appContext == null) {
+            appContext = context.applicationContext
+        }
+    }
 
     // Debounced auto-backup to SAF folder (MultiTimer data).
     private var autoBackupJob: Job? = null
@@ -84,29 +94,113 @@ class MainViewModel : ViewModel() {
                     nowMs = System.currentTimeMillis()
                 )
             }
+            // Ensure autoexport is active after restore.
+            scheduleAutoBackup()
             return
         }
 
-        // Fallback: demo data (puoi cancellarlo quando vuoi)
-        val logseq = engine.createTag("Logseq")
-        val coding = engine.createTag("coding")
-        val siti = engine.createTag("siti")
-        val faccende = engine.createTag("faccende")
-
-        val t1 = engine.createTask("Logseq FAQ monitor", setOf(logseq.id, coding.id))
-        val t2 = engine.createTask("lavatrice", setOf(faccende.id))
-        val t3 = engine.createTask("site monitor", setOf(coding.id, siti.id))
-
+        // Fresh install (or no snapshot yet): start clean.
         _state.update {
             it.copy(
-                tasks = listOf(t1, t2, t3),
-                tags = listOf(logseq, coding, siti, faccende),
-                taskSessions = engine.getTaskSessions(),
-                tagSessions = engine.getTagSessions()
+                tasks = emptyList(),
+                tags = emptyList(),
+                taskSessions = emptyList(),
+                tagSessions = emptyList(),
+                nowMs = System.currentTimeMillis()
             )
         }
         persist()
         scheduleAutoBackup()
+    }
+
+    data class BackupProbeResult(
+        val hasValidFullSet: Boolean,
+        val presentFiles: List<String>,
+        val problems: List<String>
+    )
+
+    private val expectedCsv = listOf(
+        "sessions.csv" to "task_id,task_name,start_ts,end_ts",
+        "totals.csv" to "task_id,task_name,total_ms",
+        "tag_sessions.csv" to "tag_id,tag_name,task_id,task_name,start_ts,end_ts",
+        "tag_totals.csv" to "tag_id,tag_name,total_ms"
+    )
+
+    /**
+     * Probe leggera: esistono i 4 file? Sono leggibili? Header compatibile?
+     */
+    fun probeBackupFolder(context: Context): BackupProbeResult {
+        bindContext(context)
+        return runCatching {
+            val dir = BackupFolderStore.getOrCreateDataDir(context)
+            val present = mutableListOf<String>()
+            val problems = mutableListOf<String>()
+            var okCount = 0
+
+            for ((name, expectedHeader) in expectedCsv) {
+                val f = dir.findFile(name)
+                if (f == null) {
+                    problems.add("Manca $name")
+                    continue
+                }
+                present.add(name)
+                if (!f.canRead()) {
+                    problems.add("Non leggibile: $name")
+                    continue
+                }
+                val header = readFirstLine(context, f.uri)
+                if (header == null) {
+                    problems.add("Vuoto o non leggibile: $name")
+                    continue
+                }
+                if (header.trim() != expectedHeader) {
+                    problems.add("Header non valido: $name")
+                    continue
+                }
+                okCount++
+            }
+
+            BackupProbeResult(
+                hasValidFullSet = okCount == expectedCsv.size,
+                presentFiles = present.toList(),
+                problems = problems.toList()
+            )
+        }.getOrElse {
+            BackupProbeResult(
+                hasValidFullSet = false,
+                presentFiles = emptyList(),
+                problems = listOf(it.message ?: it.javaClass.simpleName)
+            )
+        }
+    }
+
+    private fun readFirstLine(context: Context, uri: Uri): String? {
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                input.bufferedReader(Charsets.UTF_8).useLines { seq ->
+                    seq.firstOrNull { it.isNotBlank() }
+                }
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Cancella SOLO i 4 file CSV attesi (match nome esatto).
+     */
+    fun deleteBackupCsv(context: Context) {
+        bindContext(context)
+        runCatching {
+            val dir = BackupFolderStore.getOrCreateDataDir(context)
+            expectedCsv.forEach { (name, _) ->
+                dir.findFile(name)?.let { f ->
+                    if (f.name == name) {
+                        f.delete()
+                    }
+                }
+            }
+        }.onFailure { e ->
+            Toast.makeText(context, "Cleanup fallito: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun persist() {
@@ -206,37 +300,41 @@ class MainViewModel : ViewModel() {
     fun importBackup(context: Context) {
         viewModelScope.launch {
             try {
-                val dir = BackupFolderStore.getOrCreateDataDir(context)
-                val snapshot = CsvImporter.importFromBackupFolder(context, dir)
-
-                engine.loadImportedSnapshot(
-                    tasks = snapshot.tasks,
-                    tags = snapshot.tags,
-                    importedTaskSessions = snapshot.taskSessions,
-                    importedTagSessions = snapshot.tagSessions
-                )
-
-                _state.update {
-                    it.copy(
-                        tasks = snapshot.tasks,
-                        tags = snapshot.tags,
-                        taskSessions = snapshot.taskSessions,
-                        tagSessions = snapshot.tagSessions,
-                        nowMs = System.currentTimeMillis()
-                    )
-                }
-                persist()
-                lastBackupSignature = computeBackupSignature()
-
-                Toast.makeText(
-                    context,
-                    "Import completato: ${snapshot.tasks.size} task, ${snapshot.tags.size} tag",
-                    Toast.LENGTH_LONG
-                ).show()
+                importBackupBlocking(context)
+                Toast.makeText(context, "Import completato", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Import fallito: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    /**
+     * Same as importBackup(), but runs in the caller coroutine (so UI can await it).
+     */
+    suspend fun importBackupBlocking(context: Context) {
+        bindContext(context)
+        val dir = BackupFolderStore.getOrCreateDataDir(context)
+        val snapshot = CsvImporter.importFromBackupFolder(context, dir)
+
+        engine.loadImportedSnapshot(
+            tasks = snapshot.tasks,
+            tags = snapshot.tags,
+            importedTaskSessions = snapshot.taskSessions,
+            importedTagSessions = snapshot.tagSessions
+        )
+
+        _state.update {
+            it.copy(
+                tasks = snapshot.tasks,
+                tags = snapshot.tags,
+                taskSessions = snapshot.taskSessions,
+                tagSessions = snapshot.tagSessions,
+                nowMs = System.currentTimeMillis()
+            )
+        }
+        persist()
+        lastBackupSignature = computeBackupSignature()
+        scheduleAutoBackup()
     }
 
     fun toggleTask(taskId: Long) {

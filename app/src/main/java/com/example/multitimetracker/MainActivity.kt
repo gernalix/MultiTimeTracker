@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker
 
 import android.Manifest
@@ -6,11 +6,16 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,8 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.ui.AppRoot
 import com.example.multitimetracker.ui.theme.MultiTimeTrackerTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,6 +47,34 @@ private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
 
+    val scope = rememberCoroutineScope()
+
+    // --- First-run setup: pick a workspace folder for import + autoexport.
+    val showImportPrompt = remember { mutableStateOf(false) }
+    val setupInProgress = remember { mutableStateOf(false) }
+    val setupDone = remember { mutableStateOf(false) }
+    val pendingProbe = remember { mutableStateOf<MainViewModel.BackupProbeResult?>(null) }
+
+    val treePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) {
+            // User cancelled: keep prompting at next app start.
+            setupInProgress.value = false
+            return@rememberLauncherForActivityResult
+        }
+        setupInProgress.value = true
+        vm.setBackupRootFolder(context, uri)
+        val probe = vm.probeBackupFolder(context)
+        pendingProbe.value = probe
+        showImportPrompt.value = probe.hasValidFullSet
+        if (!probe.hasValidFullSet) {
+            // No previous data (or not valid) -> proceed.
+            setupDone.value = true
+            setupInProgress.value = false
+        }
+    }
+
     val permissionGranted = remember {
         mutableStateOf(
             Build.VERSION.SDK_INT < 33 ||
@@ -54,11 +89,74 @@ private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
     }
 
     LaunchedEffect(Unit) {
-        // Restore persisted state (and auto-resume running timers) as soon as the UI starts.
-        vm.initialize(context)
+        // Provide context early for setup flows that may persist/import before initialize().
+        vm.bindContext(context)
+
+        // Setup phase (folder pick + optional import/cleanup) must happen BEFORE initialize,
+        // otherwise demo/empty data would be created and autoexport could race.
+        if (BackupFolderStore.getTreeUri(context) == null) {
+            setupInProgress.value = true
+            treePickerLauncher.launch(null)
+        } else {
+            setupDone.value = true
+        }
         if (Build.VERSION.SDK_INT >= 33 && !permissionGranted.value) {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    LaunchedEffect(setupDone.value) {
+        if (setupDone.value) vm.initialize(context)
+    }
+
+    if (showImportPrompt.value) {
+        val probe = pendingProbe.value
+        AlertDialog(
+            onDismissRequest = {
+                // Force a choice to avoid accidental silent behavior.
+            },
+            title = { Text("Import dati trovati?") },
+            text = {
+                Text(
+                    "Ho trovato i CSV di una precedente installazione nella cartella dati. " +
+                        "Vuoi importarli ora?\n\n" +
+                        "File: ${probe?.presentFiles?.joinToString(", ") ?: ""}"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImportPrompt.value = false
+                    setupInProgress.value = true
+                    scope.launch {
+                        val ok = runCatching { vm.importBackupBlocking(context) }.isSuccess
+                        if (ok) {
+                            Toast.makeText(context, "Import completato", Toast.LENGTH_LONG).show()
+                            setupDone.value = true
+                        } else {
+                            Toast.makeText(context, "Import fallito", Toast.LENGTH_LONG).show()
+                            // Keep setup incomplete so the user can retry later.
+                        }
+                        setupInProgress.value = false
+                    }
+                }) {
+                    Text("Sì, importa")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showImportPrompt.value = false
+                    setupInProgress.value = true
+                    scope.launch {
+                        vm.deleteBackupCsv(context)
+                        Toast.makeText(context, "Dati precedenti eliminati", Toast.LENGTH_LONG).show()
+                        setupDone.value = true
+                        setupInProgress.value = false
+                    }
+                }) {
+                    Text("No, elimina")
+                }
+            }
+        )
     }
 
     // Foreground service "solo mentre traccio"
