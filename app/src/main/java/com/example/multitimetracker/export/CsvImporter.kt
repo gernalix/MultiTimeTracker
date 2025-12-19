@@ -1,10 +1,12 @@
-// v3
+// v4
 package com.example.multitimetracker.export
 
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
+import org.json.JSONArray
+import org.json.JSONObject
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 
@@ -16,6 +18,7 @@ import com.example.multitimetracker.model.Task
  * - totals.csv (opzionale, solo validazione)
  * - tag_sessions.csv
  * - tag_totals.csv (opzionale, solo validazione)
+ * - dict.json (opzionale ma consigliato: anagrafica task/tag + associazioni)
  */
 object CsvImporter {
 
@@ -31,73 +34,137 @@ object CsvImporter {
 
         val byName = uris.associateBy { uri -> displayName(context, uri) ?: uri.lastPathSegment.orEmpty() }
 
-        val taskSessionsCsv = byName["sessions.csv"]
-            ?: throw IllegalArgumentException("Manca sessions.csv")
-        val tagSessionsCsv = byName["tag_sessions.csv"]
-            ?: throw IllegalArgumentException("Manca tag_sessions.csv")
+        val dictUri = byName["dict.json"]
+        val dict = dictUri?.let { parseDictJson(readText(context, it)) }
 
-        val taskSessions = parseTaskSessions(readLines(context, taskSessionsCsv))
-        val tagSessions = parseTagSessions(readLines(context, tagSessionsCsv))
-        return buildSnapshot(taskSessions, tagSessions)
+        val taskSessions = byName["sessions.csv"]?.let { parseTaskSessions(readLines(context, it)) } ?: emptyList()
+        val tagSessions = byName["tag_sessions.csv"]?.let { parseTagSessions(readLines(context, it)) } ?: emptyList()
+
+        if (dict == null && (byName["sessions.csv"] == null || byName["tag_sessions.csv"] == null)) {
+            // Legacy import: without dict.json we need both session files to reconstruct tasks/tags.
+            if (byName["sessions.csv"] == null) throw IllegalArgumentException("Manca sessions.csv")
+            if (byName["tag_sessions.csv"] == null) throw IllegalArgumentException("Manca tag_sessions.csv")
+        }
+
+        return buildSnapshot(
+            baseTasks = dict?.tasks,
+            baseTags = dict?.tags,
+            taskSessions = taskSessions,
+            tagSessions = tagSessions
+        )
     }
+
 
     /**
      * Import directly from the persistent backup folder (MultiTimer data) without any file picker.
      */
     fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapshot {
-        val taskSessionsDoc = dir.findFile("sessions.csv")
-            ?: throw IllegalArgumentException("Manca sessions.csv in '${dir.name ?: "backup"}'")
-        val tagSessionsDoc = dir.findFile("tag_sessions.csv")
-            ?: throw IllegalArgumentException("Manca tag_sessions.csv in '${dir.name ?: "backup"}'")
+        val dictDoc = dir.findFile("dict.json")
+        val dict = dictDoc?.let { doc ->
+            if (!doc.canRead()) null else runCatching { parseDictJson(readText(context, doc.uri)) }.getOrNull()
+        }
 
-        val taskSessions = parseTaskSessions(readLines(context, taskSessionsDoc.uri))
-        val tagSessions = parseTagSessions(readLines(context, tagSessionsDoc.uri))
-        return buildSnapshot(taskSessions, tagSessions)
+        val taskSessionsDoc = dir.findFile("sessions.csv")
+        val tagSessionsDoc = dir.findFile("tag_sessions.csv")
+
+        val taskSessions = taskSessionsDoc?.let { parseTaskSessions(readLines(context, it.uri)) } ?: emptyList()
+        val tagSessions = tagSessionsDoc?.let { parseTagSessions(readLines(context, it.uri)) } ?: emptyList()
+
+        if (dict == null && (taskSessionsDoc == null || tagSessionsDoc == null)) {
+            if (taskSessionsDoc == null) throw IllegalArgumentException("Manca sessions.csv in '${dir.name ?: "backup"}'")
+            if (tagSessionsDoc == null) throw IllegalArgumentException("Manca tag_sessions.csv in '${dir.name ?: "backup"}'")
+        }
+
+        return buildSnapshot(
+            baseTasks = dict?.tasks,
+            baseTags = dict?.tags,
+            taskSessions = taskSessions,
+            tagSessions = tagSessions
+        )
     }
 
-    private fun buildSnapshot(taskSessions: List<TaskSession>, tagSessions: List<TagSession>): ImportedSnapshot {
-        // Rebuild tags
-        val tagsById = linkedMapOf<Long, String>()
+
+    private fun buildSnapshot(
+        baseTasks: List<Task>?,
+        baseTags: List<Tag>?,
+        taskSessions: List<TaskSession>,
+        tagSessions: List<TagSession>
+    ): ImportedSnapshot {
+
+        // Start from dict.json if present (authoritative for structure).
+        val tagsById: LinkedHashMap<Long, Tag> = linkedMapOf()
+        val tasksById: LinkedHashMap<Long, Task> = linkedMapOf()
+
+        baseTags?.forEach { t ->
+            tagsById[t.id] = t.copy(activeChildrenCount = 0, totalMs = 0L, lastStartedAtMs = null)
+        }
+        baseTasks?.forEach { t ->
+            tasksById[t.id] = t.copy(isRunning = false, totalMs = 0L, lastStartedAtMs = null)
+        }
+
+        // Fallback/merge from tag_sessions.csv (legacy support)
         tagSessions.forEach { s ->
-            tagsById.putIfAbsent(s.tagId, s.tagName)
-        }
-        val tags = tagsById.entries.map { (id, name) ->
-            Tag(
-                id = id,
-                name = name,
-                activeChildrenCount = 0,
-                totalMs = 0L,
-                lastStartedAtMs = null
-            )
+            if (!tagsById.containsKey(s.tagId)) {
+                tagsById[s.tagId] = Tag(
+                    id = s.tagId,
+                    name = s.tagName,
+                    activeChildrenCount = 0,
+                    totalMs = 0L,
+                    lastStartedAtMs = null
+                )
+            }
+            if (!tasksById.containsKey(s.taskId)) {
+                tasksById[s.taskId] = Task(
+                    id = s.taskId,
+                    name = s.taskName,
+                    tagIds = setOf(s.tagId),
+                    isRunning = false,
+                    totalMs = 0L,
+                    lastStartedAtMs = null
+                )
+            } else {
+                // Ensure the association is present (dict might be missing it).
+                val cur = tasksById[s.taskId]!!
+                if (!cur.tagIds.contains(s.tagId)) {
+                    tasksById[s.taskId] = cur.copy(tagIds = cur.tagIds + s.tagId)
+                }
+            }
         }
 
-        // Map task -> tagIds (from tag_sessions)
-        val taskToTagIds = linkedMapOf<Long, MutableSet<Long>>()
-        tagSessions.forEach { s ->
-            taskToTagIds.getOrPut(s.taskId) { linkedSetOf() }.add(s.tagId)
+        // Also merge task names from sessions.csv if needed.
+        taskSessions.forEach { s ->
+            val cur = tasksById[s.taskId]
+            if (cur == null) {
+                tasksById[s.taskId] = Task(
+                    id = s.taskId,
+                    name = s.taskName,
+                    tagIds = emptySet(),
+                    isRunning = false,
+                    totalMs = 0L,
+                    lastStartedAtMs = null
+                )
+            } else if (cur.name.startsWith("task_")) {
+                tasksById[s.taskId] = cur.copy(name = s.taskName)
+            }
         }
 
-        // Task names: prefer sessions.csv, fallback to tag_sessions.csv
-        val taskNames = linkedMapOf<Long, String>()
-        taskSessions.forEach { s -> taskNames.putIfAbsent(s.taskId, s.taskName) }
-        tagSessions.forEach { s -> taskNames.putIfAbsent(s.taskId, s.taskName) }
-
-        // Totals from taskSessions (authoritative)
+        // Totals (authoritative from sessions content)
         val taskTotals = taskSessions
             .groupBy { it.taskId }
             .mapValues { (_, v) -> v.sumOf { (it.endTs - it.startTs).coerceAtLeast(0L) } }
 
-        val allTaskIds = (taskNames.keys + taskToTagIds.keys).toSortedSet()
-        val tasks = allTaskIds.map { taskId ->
-            Task(
-                id = taskId,
-                name = taskNames[taskId] ?: "task_$taskId",
-                tagIds = taskToTagIds[taskId]?.toSet() ?: emptySet(),
-                isRunning = false,
-                totalMs = taskTotals[taskId] ?: 0L,
-                lastStartedAtMs = null
-            )
-        }
+        val tagTotals = tagSessions
+            .groupBy { it.tagId }
+            .mapValues { (_, v) -> v.sumOf { (it.endTs - it.startTs).coerceAtLeast(0L) } }
+
+        // Apply totals
+        val tasks = tasksById.values
+            .sortedBy { it.id }
+            .map { t -> t.copy(totalMs = taskTotals[t.id] ?: 0L, isRunning = false, lastStartedAtMs = null) }
+
+        val tags = tagsById.values
+            .sortedBy { it.id }
+            .map { t -> t.copy(totalMs = tagTotals[t.id] ?: 0L, activeChildrenCount = 0, lastStartedAtMs = null) }
 
         return ImportedSnapshot(
             tasks = tasks,
@@ -106,6 +173,7 @@ object CsvImporter {
             tagSessions = tagSessions
         )
     }
+
 
     private fun displayName(context: Context, uri: Uri): String? {
         val cr = context.contentResolver

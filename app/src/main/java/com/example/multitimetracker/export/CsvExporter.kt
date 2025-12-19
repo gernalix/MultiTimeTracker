@@ -1,8 +1,12 @@
-// v10
+// v11
 package com.example.multitimetracker.export
 
 import android.content.Context
 import androidx.documentfile.provider.DocumentFile
+import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.model.Task
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileWriter
 import java.io.OutputStreamWriter
@@ -54,10 +58,62 @@ object CsvExporter {
         } ?: throw IllegalStateException("Impossibile aprire output stream per: $fileName")
     }
 
+
+    /**
+     * Writes text content to a file inside a SAF directory (DocumentFile).
+     * Uses a truncate write ("wt") so the result is always coherent.
+     */
+    private fun writeTextToDir(context: Context, dir: DocumentFile, mime: String, fileName: String, writeBody: (Appendable) -> Unit) {
+        val cr = context.contentResolver
+        val existing = dir.findFile(fileName)
+        val target = existing ?: dir.createFile(mime, fileName)
+        requireNotNull(target) { "Impossibile creare file: $fileName" }
+
+        cr.openOutputStream(target.uri, "wt")?.use { out: java.io.OutputStream ->
+            requireNotNull(out) { "Impossibile aprire output stream per: $fileName" }
+            OutputStreamWriter(out, Charsets.UTF_8).use { w ->
+                writeBody(w)
+                w.flush()
+            }
+        } ?: throw IllegalStateException("Impossibile aprire output stream per: $fileName")
+    }
+
     /**
      * Full export into a directory called from automatic backup/import flows.
      */
-    fun exportAllToDirectory(context: Context, dir: DocumentFile, taskSessions: List<TaskSession>, tagSessions: List<TagSession>) {
+    fun exportAllToDirectory(context: Context, dir: DocumentFile, tasks: List<Task>, tags: List<Tag>, taskSessions: List<TaskSession>, tagSessions: List<TagSession>) {
+
+        // 5° file: dict.json (anagrafica task/tag + associazioni task↔tag), leggibile da umani.
+        writeTextToDir(context, dir, "application/json", "dict.json") { w ->
+            val root = JSONObject()
+            root.put("schema_version", 1)
+            root.put("exported_at", System.currentTimeMillis())
+
+            val tagsArr = JSONArray()
+            tags.sortedBy { it.id }.forEach { t ->
+                val o = JSONObject()
+                o.put("id", t.id)
+                o.put("name", t.name)
+                tagsArr.put(o)
+            }
+            root.put("tags", tagsArr)
+
+            val tasksArr = JSONArray()
+            tasks.sortedBy { it.id }.forEach { t ->
+                val o = JSONObject()
+                o.put("id", t.id)
+                o.put("name", t.name)
+                val tagIdsArr = JSONArray()
+                t.tagIds.sorted().forEach { tagIdsArr.put(it) }
+                o.put("tagIds", tagIdsArr)
+                tasksArr.put(o)
+            }
+            root.put("tasks", tasksArr)
+
+            w.append(root.toString(2))
+            w.appendLine()
+        }
+
         writeCsvToDir(context, dir, "sessions.csv") { w ->
             w.appendLine("task_id,task_name,start_ts,end_ts")
             taskSessions.forEach { s ->

@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker
 
 import android.content.Context
@@ -191,7 +191,7 @@ class MainViewModel : ViewModel() {
         bindContext(context)
         runCatching {
             val dir = BackupFolderStore.getOrCreateDataDir(context)
-            expectedCsv.forEach { (name, _) ->
+            (expectedCsv.map { it.first } + "dict.json").forEach { name ->
                 dir.findFile(name)?.let { f ->
                     if (f.name == name) {
                         f.delete()
@@ -226,8 +226,20 @@ class MainViewModel : ViewModel() {
         val tgs = engine.getTagSessions()
         val lastTask = ts.maxOfOrNull { it.endTs } ?: 0L
         val lastTag = tgs.maxOfOrNull { it.endTs } ?: 0L
-        return "${ts.size}|${tgs.size}|$lastTask|$lastTag"
+
+        // Include structure changes too (tasks/tags + associations), so dict.json stays in sync
+        // even when the user edits tasks/tags without creating new sessions.
+        val cur = _state.value
+        val tasksSig = cur.tasks
+            .sortedBy { it.id }
+            .joinToString("|") { t -> "${t.id}:${t.name}:${t.tagIds.sorted().joinToString(",")}" }
+        val tagsSig = cur.tags
+            .sortedBy { it.id }
+            .joinToString("|") { t -> "${t.id}:${t.name}" }
+
+        return "${ts.size}|${tgs.size}|$lastTask|$lastTag|$tasksSig|$tagsSig"
     }
+
 
     private fun scheduleAutoBackup() {
         val ctx = appContext ?: return
@@ -246,6 +258,8 @@ class MainViewModel : ViewModel() {
                 CsvExporter.exportAllToDirectory(
                     context = ctx,
                     dir = dir,
+                    tasks = _state.value.tasks,
+                    tags = _state.value.tags,
                     taskSessions = engine.getTaskSessions(),
                     tagSessions = engine.getTagSessions()
                 )
@@ -289,7 +303,7 @@ class MainViewModel : ViewModel() {
 
         try {
             val dir = BackupFolderStore.getOrCreateDataDir(context)
-            CsvExporter.exportAllToDirectory(context, dir, taskSessions, tagSessions)
+            CsvExporter.exportAllToDirectory(context, dir, _state.value.tasks, _state.value.tags, taskSessions, tagSessions)
             lastBackupSignature = computeBackupSignature()
             Toast.makeText(context, "Export completato in '${dir.name ?: "MultiTimer data"}'", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
