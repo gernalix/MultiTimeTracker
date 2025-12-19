@@ -1,4 +1,4 @@
-// v14
+// v15
 package com.example.multitimetracker
 
 import android.content.Context
@@ -264,7 +264,9 @@ class MainViewModel : ViewModel() {
                     tasks = _state.value.tasks,
                     tags = _state.value.tags,
                     taskSessions = engine.getTaskSessions(),
-                    tagSessions = engine.getTagSessions()
+                    tagSessions = engine.getTagSessions(),
+                    activeTagStart = runtime.activeTagStart,
+                    nowMs = _state.value.nowMs
                 )
                 lastBackupSignature = sig
             }
