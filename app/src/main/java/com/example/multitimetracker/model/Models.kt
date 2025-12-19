@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -6,6 +6,7 @@ import com.example.multitimetracker.export.TagSession
 data class Task(
     val id: Long,
     val name: String,
+    val link: String,
     val tagIds: Set<Long>,
     val isRunning: Boolean,
     val totalMs: Long,

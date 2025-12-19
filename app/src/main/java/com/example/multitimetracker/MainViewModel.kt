@@ -1,4 +1,4 @@
-// v16
+// v17
 package com.example.multitimetracker
 
 import android.content.Context
@@ -381,11 +381,11 @@ class MainViewModel : ViewModel() {
         scheduleAutoBackup()
     }
 
-    fun addTask(name: String, tagIds: Set<Long>) {
+    fun addTask(name: String, tagIds: Set<Long>, link: String) {
         if (name.isBlank()) return
         _state.update { current ->
             val now = System.currentTimeMillis()
-            val task = engine.createTask(name.trim(), tagIds)
+            val task = engine.createTask(name.trim(), tagIds, link.trim())
             val withTask = current.tasks + task
 
             // Requirement: a task starts automatically immediately after being created.
@@ -430,7 +430,7 @@ class MainViewModel : ViewModel() {
     }
 
 
-    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>) {
+    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>, link: String) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val result = engine.reassignTaskTags(
@@ -441,7 +441,7 @@ class MainViewModel : ViewModel() {
                 nowMs = now
             )
             val updated = current.copy(
-                tasks = result.tasks,
+                tasks = result.tasks.map { if (it.id == taskId) it.copy(link = link.trim()) else it },
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),

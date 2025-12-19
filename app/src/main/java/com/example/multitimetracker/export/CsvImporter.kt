@@ -1,4 +1,4 @@
-// v7
+// v8
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -123,6 +123,7 @@ object CsvImporter {
                     id = s.taskId,
                     name = s.taskName,
                     tagIds = setOf(s.tagId),
+                    link = "",
                     isRunning = false,
                     totalMs = 0L,
                     lastStartedAtMs = null
@@ -144,6 +145,7 @@ object CsvImporter {
                     id = s.taskId,
                     name = s.taskName,
                     tagIds = emptySet(),
+                    link = "",
                     isRunning = false,
                     totalMs = 0L,
                     lastStartedAtMs = null

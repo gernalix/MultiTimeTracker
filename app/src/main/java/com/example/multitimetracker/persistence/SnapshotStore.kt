@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -6,6 +6,7 @@ import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
+import com.example.multitimetracker.model.ActiveTag
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -53,7 +54,7 @@ object SnapshotStore {
                         .put("id", t.id)
                         .put("name", t.name)
                         .put("link", t.link)
-                        .put("tagIds", JSONArray().apply { t.tagIds.forEach { put(it) } })
+                        .put("tagIds", JSONArray().apply { t.tagIds.forEach { this.put(it) } })
                         .put("isRunning", t.isRunning)
                         .put("totalMs", t.totalMs)
                         .put("lastStartedAtMs", t.lastStartedAtMs)
