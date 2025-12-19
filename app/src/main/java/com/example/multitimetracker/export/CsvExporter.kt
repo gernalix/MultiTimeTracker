@@ -1,4 +1,4 @@
-// v13
+// v14
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -64,6 +64,14 @@ private fun csvEscape(s: String): String {
     return "\"$out\""
 }
 
+
+private fun formatHhMmSs(ms: Long): String {
+    val totalSeconds = ms / 1000L
+    val h = totalSeconds / 3600L
+    val m = (totalSeconds % 3600L) / 60L
+    val s = totalSeconds % 60L
+    return "%02d:%02d:%02d".format(h, m, s)
+}
 object CsvExporter {
 
     /**

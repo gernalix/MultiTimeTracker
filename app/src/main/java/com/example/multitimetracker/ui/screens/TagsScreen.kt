@@ -1,4 +1,4 @@
-// v10
+// v11
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.UiState
+import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.ui.components.TagRow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,6 +48,7 @@ fun TagsScreen(
     var openedTagId by remember { mutableStateOf<Long?>(null) }
     var editingTagId by remember { mutableStateOf<Long?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    val engine = remember { TimeEngine() }
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 

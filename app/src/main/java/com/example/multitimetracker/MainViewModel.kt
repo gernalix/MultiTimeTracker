@@ -1,4 +1,4 @@
-// v15
+// v16
 package com.example.multitimetracker
 
 import android.content.Context
@@ -258,6 +258,7 @@ class MainViewModel : ViewModel() {
                 if (sig == lastBackupSignature) return@runCatching
 
                 val dir = BackupFolderStore.getOrCreateDataDir(ctx)
+                val runtime = engine.exportRuntimeSnapshot()
                 CsvExporter.exportAllToDirectory(
                     context = ctx,
                     dir = dir,
