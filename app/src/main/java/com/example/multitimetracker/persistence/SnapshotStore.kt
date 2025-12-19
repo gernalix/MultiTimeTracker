@@ -1,4 +1,4 @@
-// v3
+// v4
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -177,7 +177,8 @@ object SnapshotStore {
             out.add(
                 Task(
                     id = o.getLong("id"),
-                    name = o.getString("name"), ""),
+                    name = o.getString("name"),
+                    link = if (o.has("link") && !o.isNull("link")) o.getString("link") else "",
                     tagIds = tagIds,
                     isRunning = o.getBoolean("isRunning"),
                     totalMs = o.getLong("totalMs"),

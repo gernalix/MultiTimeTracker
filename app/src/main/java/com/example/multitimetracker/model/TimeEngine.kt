@@ -1,4 +1,4 @@
-// v9
+// v11
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -107,6 +107,7 @@ class TimeEngine {
         tags: List<Tag>,
         taskId: Long,
         newTagIds: Set<Long>,
+        newLink: String? = null,
         nowMs: Long = System.currentTimeMillis()
     ): EngineResult {
         val idx = tasks.indexOfFirst { it.id == taskId }
@@ -124,7 +125,7 @@ class TimeEngine {
             added.forEach { tagId -> newTags = startTagForTask(task, newTags, tagId, nowMs) }
         }
 
-        val updatedTask = task.copy(tagIds = newTagIds)
+        val updatedTask = task.copy(tagIds = newTagIds, link = newLink ?: task.link)
         val newTasks = tasks.toMutableList().also { it[idx] = updatedTask }.toList()
 
         return EngineResult(newTasks, newTags)
