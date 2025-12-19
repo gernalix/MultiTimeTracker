@@ -1,4 +1,4 @@
-// v1
+// v2
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -52,6 +52,7 @@ object SnapshotStore {
                     JSONObject()
                         .put("id", t.id)
                         .put("name", t.name)
+                        .put("link", t.link)
                         .put("tagIds", JSONArray().apply { t.tagIds.forEach { put(it) } })
                         .put("isRunning", t.isRunning)
                         .put("totalMs", t.totalMs)
@@ -178,6 +179,7 @@ object SnapshotStore {
                 Task(
                     id = o.getLong("id"),
                     name = o.getString("name"),
+                    link = o.optString("link", ""),
                     tagIds = tagIds,
                     isRunning = o.getBoolean("isRunning"),
                     totalMs = o.getLong("totalMs"),

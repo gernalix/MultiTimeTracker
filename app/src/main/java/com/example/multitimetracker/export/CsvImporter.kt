@@ -1,4 +1,4 @@
-// v5
+// v6
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -208,6 +208,7 @@ object CsvImporter {
             val o = tagsJson.optJSONObject(i) ?: continue
             val id = o.optLong("id", Long.MIN_VALUE)
             val name = o.optString("name", "").trim()
+            val link = o.optString("link", "").trim()
             if (id == Long.MIN_VALUE || name.isBlank()) continue
             tags.add(
                 Tag(
@@ -241,6 +242,7 @@ object CsvImporter {
                 Task(
                     id = id,
                     name = name,
+                    link = link,
                     tagIds = tagIds,
                     isRunning = false,
                     totalMs = 0L,

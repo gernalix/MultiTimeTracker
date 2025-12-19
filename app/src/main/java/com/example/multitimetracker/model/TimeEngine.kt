@@ -1,4 +1,4 @@
-// v8
+// v9
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -48,9 +48,10 @@ class TimeEngine {
         lastStartedAtMs = null
     )
 
-    fun createTask(name: String, tagIds: Set<Long>): Task = Task(
+    fun createTask(name: String, tagIds: Set<Long>, link: String = ""): Task = Task(
         id = nextTaskId++,
         name = name,
+        link = link,
         tagIds = tagIds,
         isRunning = false,
         totalMs = 0L,

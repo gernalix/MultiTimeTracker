@@ -1,8 +1,10 @@
-// v15
+// v16
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
 import android.content.Context
+import android.net.Uri
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -64,6 +68,7 @@ import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,9 +76,9 @@ fun TasksScreen(
     modifier: Modifier,
     state: UiState,
     onToggleTask: (Long) -> Unit,
-    onAddTask: (String, Set<Long>) -> Unit,
+    onAddTask: (String, Set<Long>, String) -> Unit,
     onAddTag: (String) -> Unit,
-    onEditTaskTags: (Long, Set<Long>) -> Unit,
+    onEditTaskTags: (Long, Set<Long>, String) -> Unit,
     onDeleteTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
@@ -91,6 +96,9 @@ fun TasksScreen(
     val engine = remember { TimeEngine() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
@@ -179,6 +187,13 @@ fun TasksScreen(
                 },
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            val activeCount = state.tasks.count { it.isRunning }
+            Text(
+                text = "$activeCount task attivi",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 12.dp)
+            )
+
             // Search
             OutlinedTextField(
                 value = query,
@@ -221,6 +236,7 @@ fun TasksScreen(
             }
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
                     .fillMaxSize(),
@@ -233,9 +249,21 @@ fun TasksScreen(
                         tags = state.tags,
                         nowMs = state.nowMs,
                         highlightRunning = task.isRunning,
-                        onToggle = { onToggleTask(task.id) },
+                        onToggle = {
+                            if (!task.isRunning) {
+                                onToggleTask(task.id)
+                                scope.launch { listState.animateScrollToItem(0) }
+                            } else {
+                                onToggleTask(task.id)
+                            }
+                        },
                         onOpenHistory = { openedTaskId = task.id },
                         trailing = {
+                            if (task.link.isNotBlank()) {
+                                IconButton(onClick = { openLink(context, task.link) }) {
+                                    Text("🔗")
+                                }
+                            }
                             IconButton(onClick = { editingTaskId = task.id }) {
                                 Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
                             }
@@ -255,8 +283,8 @@ fun TasksScreen(
             tags = state.tags,
             onDismiss = { showAdd = false },
             onAddTag = onAddTag,
-            onConfirm = { name, tagIds ->
-                onAddTask(name, tagIds)
+            onConfirm = { name, tagIds, link ->
+                onAddTask(name, tagIds, link)
                 focusManager.clearFocus()
                 keyboardController?.hide()
                 showAdd = false
@@ -311,13 +339,14 @@ fun TasksScreen(
     if (editId != null) {
         val task = state.tasks.firstOrNull { it.id == editId }
         if (task != null) {
-            EditTagsDialog(
-                title = "Modifica tag",
+            EditTaskDialog(
+                title = "Modifica task",
                 tags = state.tags,
                 initialSelection = task.tagIds,
+                initialLink = task.link,
                 onDismiss = { editingTaskId = null },
-                onConfirm = { newTags ->
-                    onEditTaskTags(editId, newTags)
+                onConfirm = { newTags, newLink ->
+                    onEditTaskTags(editId, newTags, newLink)
                     editingTaskId = null
                 }
             )
@@ -460,9 +489,10 @@ private fun AddTaskDialog(
     tags: List<Tag>,
     onDismiss: () -> Unit,
     onAddTag: (String) -> Unit,
-    onConfirm: (String, Set<Long>) -> Unit
+    onConfirm: (String, Set<Long>, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var link by remember { mutableStateOf("") }
     var newTagName by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
 
@@ -478,6 +508,14 @@ private fun AddTaskDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nome task") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it },
+                    label = { Text("Link (opzionale)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -524,7 +562,7 @@ private fun AddTaskDialog(
             Button(onClick = {
                 focusManager.clearFocus()
                 keyboardController?.hide()
-                onConfirm(name, selected)
+                onConfirm(name, selected, link)
             }) { Text("Crea") }
         },
         dismissButton = {
@@ -538,20 +576,30 @@ private fun AddTaskDialog(
 }
 
 @Composable
-private fun EditTagsDialog(
+private fun EditTaskDialog(
     title: String,
     tags: List<Tag>,
     initialSelection: Set<Long>,
+    initialLink: String,
     onDismiss: () -> Unit,
-    onConfirm: (Set<Long>) -> Unit
+    onConfirm: (Set<Long>, String) -> Unit
 ) {
     var selected by remember { mutableStateOf(initialSelection) }
+    var link by remember { mutableStateOf(initialLink) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it },
+                    label = { Text("Link (opzionale)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 260.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -579,13 +627,24 @@ private fun EditTagsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selected) }) { Text("Salva") }
+            Button(onClick = { onConfirm(selected, link) }) { Text("Salva") }
         },
         dismissButton = {
             Button(onClick = onDismiss) { Text("Chiudi") }
         }
     )
 }
+
+private fun openLink(context: Context, raw: String) {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return
+    val url = if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) trimmed else "https://$trimmed"
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+}
+
 
 private fun formatDuration(ms: Long): String {
     val totalSec = ms / 1000

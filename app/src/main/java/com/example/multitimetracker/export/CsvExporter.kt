@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -86,7 +86,7 @@ object CsvExporter {
         // 5° file: dict.json (anagrafica task/tag + associazioni task↔tag), leggibile da umani.
         writeTextToDir(context, dir, "application/json", "dict.json") { w ->
             val root = JSONObject()
-            root.put("schema_version", 1)
+            root.put("schema_version", 2)
             root.put("exported_at", System.currentTimeMillis())
 
             val tagsArr = JSONArray()
@@ -94,6 +94,7 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
+                o.put("link", t.link)
                 tagsArr.put(o)
             }
             root.put("tags", tagsArr)
