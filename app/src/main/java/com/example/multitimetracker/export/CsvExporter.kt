@@ -1,4 +1,4 @@
-// v9
+// v10
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -45,13 +45,13 @@ object CsvExporter {
         val target = existing ?: dir.createFile("text/csv", fileName)
         requireNotNull(target) { "Impossibile creare file: $fileName" }
 
-        cr.openOutputStream(target.uri, "wt").use { out ->
+        cr.openOutputStream(target.uri, "wt")?.use { out: java.io.OutputStream ->
             requireNotNull(out) { "Impossibile aprire output stream per: $fileName" }
             OutputStreamWriter(out, Charsets.UTF_8).use { w ->
                 writeBody(w)
                 w.flush()
             }
-        }
+        } ?: throw IllegalStateException("Impossibile aprire output stream per: $fileName")
     }
 
     /**

@@ -1,4 +1,4 @@
-// v9
+// v10
 package com.example.multitimetracker
 
 import android.content.Context
@@ -175,8 +175,8 @@ class MainViewModel : ViewModel() {
 
         runCatching {
             BackupFolderStore.getOrCreateDataDir(context)
-        }.onFailure {
-            Toast.makeText(context, "Errore cartella backup: ${it.message}", Toast.LENGTH_LONG).show()
+        }.onFailure { e: Throwable ->
+            Toast.makeText(context, "Errore cartella backup: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

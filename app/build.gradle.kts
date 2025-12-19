@@ -1,3 +1,4 @@
+// v1
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -42,7 +43,8 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
+        implementation("androidx.documentfile:documentfile:1.0.1")
+implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
