@@ -1,4 +1,4 @@
-// v13
+// v14
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -57,7 +57,6 @@ import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TaskRow
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
-import com.example.multitimetracker.export.BackupFolderStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
