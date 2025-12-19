@@ -1,4 +1,4 @@
-// v8
+// v9
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
-import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TagRow
 
@@ -48,8 +47,6 @@ fun TagsScreen(
     var openedTagId by remember { mutableStateOf<Long?>(null) }
     var editingTagId by remember { mutableStateOf<Long?>(null) }
     var showAdd by remember { mutableStateOf(false) }
-
-    val engine = remember { TimeEngine() }
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
@@ -70,10 +67,22 @@ fun TagsScreen(
         ) {
             items(state.tags, key = { it.id }) { tag ->
                 val feedingTasks = state.tasks.filter { it.tagIds.contains(tag.id) }
-                // Totale tag = SUM di tutti i task che hanno questo tag.
-                val shownMs = feedingTasks.sumOf {
-                    engine.displayMs(it.totalMs, it.lastStartedAtMs, state.nowMs)
-                }
+                // Totale tag = UNION cronologica delle sessioni dei task figli (overlap conta una volta).
+                val intervals = mutableListOf<Pair<Long, Long>>()
+
+                // Sessioni chiuse
+                state.tagSessions
+                    .asSequence()
+                    .filter { it.tagId == tag.id }
+                    .forEach { intervals.add(it.startTs to it.endTs) }
+
+                // Sessioni ancora aperte (task/tag running)
+                state.activeTagStart
+                    .asSequence()
+                    .filter { it.tagId == tag.id }
+                    .forEach { intervals.add(it.startTs to state.nowMs) }
+
+                val shownMs = unionDurationMs(intervals)
 
                 val runningCount = feedingTasks.count { it.isRunning }
                 val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
@@ -225,6 +234,30 @@ private fun AddOrRenameTagDialog(
         },
         dismissButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
     )
+}
+
+
+private fun unionDurationMs(intervals: List<Pair<Long, Long>>): Long {
+    if (intervals.isEmpty()) return 0L
+    val sorted = intervals.filter { it.second > it.first }.sortedBy { it.first }
+    if (sorted.isEmpty()) return 0L
+
+    var curStart = sorted[0].first
+    var curEnd = sorted[0].second
+    var total = 0L
+
+    for (i in 1 until sorted.size) {
+        val (s, e) = sorted[i]
+        if (s <= curEnd) {
+            if (e > curEnd) curEnd = e
+        } else {
+            total += (curEnd - curStart)
+            curStart = s
+            curEnd = e
+        }
+    }
+    total += (curEnd - curStart)
+    return total
 }
 
 private fun formatDuration(ms: Long): String {

@@ -1,4 +1,4 @@
-// v13
+// v12
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -26,6 +26,33 @@ data class TagSession(
     val startTs: Long,
     val endTs: Long
 )
+
+
+private fun unionDurationMs(intervals: List<Pair<Long, Long>>): Long {
+    if (intervals.isEmpty()) return 0L
+    val sorted = intervals
+        .filter { (s, e) -> e > s }
+        .sortedBy { it.first }
+
+    if (sorted.isEmpty()) return 0L
+
+    var curStart = sorted[0].first
+    var curEnd = sorted[0].second
+    var total = 0L
+
+    for (i in 1 until sorted.size) {
+        val (s, e) = sorted[i]
+        if (s <= curEnd) {
+            if (e > curEnd) curEnd = e
+        } else {
+            total += (curEnd - curStart)
+            curStart = s
+            curEnd = e
+        }
+    }
+    total += (curEnd - curStart)
+    return total
+}
 
 private fun csvEscape(s: String): String {
     // RFC4180-ish: if the field contains a quote, escape it by doubling.
@@ -81,12 +108,21 @@ object CsvExporter {
     /**
      * Full export into a directory called from automatic backup/import flows.
      */
-    fun exportAllToDirectory(context: Context, dir: DocumentFile, tasks: List<Task>, tags: List<Tag>, taskSessions: List<TaskSession>, tagSessions: List<TagSession>) {
+    fun exportAllToDirectory(
+        context: Context,
+        dir: DocumentFile,
+        tasks: List<Task>,
+        tags: List<Tag>,
+        taskSessions: List<TaskSession>,
+        tagSessions: List<TagSession>,
+        activeTagStart: List<Triple<Long, Long, Long>>,
+        nowMs: Long
+    ) {
 
         // 5° file: dict.json (anagrafica task/tag + associazioni task↔tag), leggibile da umani.
         writeTextToDir(context, dir, "application/json", "dict.json") { w ->
             val root = JSONObject()
-            root.put("schema_version", 2)
+            root.put("schema_version", 1)
             root.put("exported_at", System.currentTimeMillis())
 
             val tagsArr = JSONArray()
@@ -103,7 +139,6 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
-                o.put("link", t.link)
                 val tagIdsArr = JSONArray()
                 t.tagIds.sorted().forEach { tagIdsArr.put(it) }
                 o.put("tagIds", tagIdsArr)
@@ -144,20 +179,29 @@ object CsvExporter {
         }
 
         writeCsvToDir(context, dir, "tag_totals.csv") { w ->
-            // Totale tag = SUM dei totali dei task che lo alimentano.
-            val perTask = tagSessions
-                .groupBy { Triple(it.tagId, it.tagName, it.taskId to it.taskName) }
-                .mapValues { (_, v) -> v.sumOf { it.endTs - it.startTs } }
+            // Totale tag = UNION cronologica delle sessioni dei task figli (overlap conta una volta).
+            val intervalsByTag = mutableMapOf<Pair<Long, String>, MutableList<Pair<Long, Long>>>()
 
-            val totals = perTask
-                .entries
-                .groupBy({ it.key.first to it.key.second }, { it.value })
-                .mapValues { (_, v) -> v.sumOf { it } }
-
-            w.appendLine("tag_id,tag_name,total_ms")
-            totals.forEach { (k, total) ->
-                w.appendLine("${k.first},${csvEscape(k.second)},$total")
+            // Sessioni chiuse (storiche)
+            tagSessions.forEach { s ->
+                val key = s.tagId to s.tagName
+                intervalsByTag.getOrPut(key) { mutableListOf() }.add(s.startTs to s.endTs)
             }
+
+            // Sessioni ancora aperte (task/tag running)
+            activeTagStart.forEach { (_, tagId, startTs) ->
+                val tagName = tags.firstOrNull { it.id == tagId }?.name ?: ""
+                val key = tagId to tagName
+                intervalsByTag.getOrPut(key) { mutableListOf() }.add(startTs to nowMs)
+            }
+
+            w.appendLine("tag_id,tag_name,total_ms,total_hhmmss")
+            intervalsByTag.entries
+                .sortedBy { it.key.first }
+                .forEach { (k, intervals) ->
+                    val total = unionDurationMs(intervals)
+                    w.appendLine("${k.first},${csvEscape(k.second)},$total,${formatHhMmSs(total)}")
+                }
         }
     }
 

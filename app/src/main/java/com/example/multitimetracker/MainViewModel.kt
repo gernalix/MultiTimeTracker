@@ -1,4 +1,4 @@
-// v15
+// v14
 package com.example.multitimetracker
 
 import android.content.Context
@@ -12,6 +12,7 @@ import com.example.multitimetracker.export.CsvExporter
 import com.example.multitimetracker.export.CsvImporter
 import com.example.multitimetracker.export.ShareUtils
 import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.model.ActiveTag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
@@ -50,6 +51,7 @@ class MainViewModel : ViewModel() {
             tags = emptyList(),
             taskSessions = emptyList(),
             tagSessions = emptyList(),
+            activeTagStart = emptyList(),
             nowMs = System.currentTimeMillis()
         )
     )
@@ -91,6 +93,7 @@ class MainViewModel : ViewModel() {
                     tags = snap.tags,
                     taskSessions = snap.taskSessions,
                     tagSessions = snap.tagSessions,
+                    activeTagStart = snap.activeTagStart.map { ActiveTag(it.taskId, it.tagId, it.startTs) },
                     nowMs = System.currentTimeMillis()
                 )
             }
@@ -232,7 +235,7 @@ class MainViewModel : ViewModel() {
         val cur = _state.value
         val tasksSig = cur.tasks
             .sortedBy { it.id }
-            .joinToString("|") { t -> "${t.id}:${t.name}:${t.link}:${t.tagIds.sorted().joinToString(",")}" }
+            .joinToString("|") { t -> "${t.id}:${t.name}:${t.tagIds.sorted().joinToString(",")}" }
         val tagsSig = cur.tags
             .sortedBy { it.id }
             .joinToString("|") { t -> "${t.id}:${t.name}" }
@@ -291,6 +294,7 @@ class MainViewModel : ViewModel() {
     fun exportBackup(context: Context) {
         val taskSessions = engine.getTaskSessions()
         val tagSessions = engine.getTagSessions()
+        val runtime = engine.exportRuntimeSnapshot()
 
         if (taskSessions.isEmpty() && tagSessions.isEmpty()) {
             Toast.makeText(
@@ -303,7 +307,7 @@ class MainViewModel : ViewModel() {
 
         try {
             val dir = BackupFolderStore.getOrCreateDataDir(context)
-            CsvExporter.exportAllToDirectory(context, dir, _state.value.tasks, _state.value.tags, taskSessions, tagSessions)
+            CsvExporter.exportAllToDirectory(context, dir, _state.value.tasks, _state.value.tags, taskSessions, tagSessions, runtime.activeTagStart, _state.value.nowMs)
             lastBackupSignature = computeBackupSignature()
             Toast.makeText(context, "Export completato in '${dir.name ?: "MultiTimer data"}'", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
@@ -365,6 +369,7 @@ class MainViewModel : ViewModel() {
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = engine.exportRuntimeSnapshot().activeTagStart.map { ActiveTag(it.first, it.second, it.third) },
                 nowMs = now
             )
             updated
@@ -373,11 +378,11 @@ class MainViewModel : ViewModel() {
         scheduleAutoBackup()
     }
 
-    fun addTask(name: String, tagIds: Set<Long>, link: String) {
+    fun addTask(name: String, tagIds: Set<Long>) {
         if (name.isBlank()) return
         _state.update { current ->
             val now = System.currentTimeMillis()
-            val task = engine.createTask(name.trim(), tagIds, link.trim())
+            val task = engine.createTask(name.trim(), tagIds)
             val withTask = current.tasks + task
 
             // Requirement: a task starts automatically immediately after being created.
@@ -394,6 +399,7 @@ class MainViewModel : ViewModel() {
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = engine.exportRuntimeSnapshot().activeTagStart.map { ActiveTag(it.first, it.second, it.third) },
                 nowMs = now
             )
         }
@@ -421,7 +427,7 @@ class MainViewModel : ViewModel() {
     }
 
 
-    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>, newLink: String) {
+    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val result = engine.reassignTaskTags(
@@ -431,12 +437,12 @@ class MainViewModel : ViewModel() {
                 newTagIds = newTagIds,
                 nowMs = now
             )
-            val tasksWithLink = result.tasks.map { t -> if (t.id == taskId) t.copy(link = newLink.trim()) else t }
             val updated = current.copy(
                 tasks = result.tasks,
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = engine.exportRuntimeSnapshot().activeTagStart.map { ActiveTag(it.first, it.second, it.third) },
                 nowMs = now
             )
             updated
@@ -461,6 +467,7 @@ class MainViewModel : ViewModel() {
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = engine.exportRuntimeSnapshot().activeTagStart.map { ActiveTag(it.first, it.second, it.third) },
                 nowMs = now
             )
             updated
@@ -483,6 +490,7 @@ class MainViewModel : ViewModel() {
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = engine.exportRuntimeSnapshot().activeTagStart.map { ActiveTag(it.first, it.second, it.third) },
                 nowMs = now
             )
             updated
@@ -493,6 +501,7 @@ class MainViewModel : ViewModel() {
 fun exportCsv(context: Context) {
         val taskSessions = engine.getTaskSessions()
         val tagSessions = engine.getTagSessions()
+        val runtime = engine.exportRuntimeSnapshot()
 
         if (taskSessions.isEmpty() && tagSessions.isEmpty()) {
             Toast.makeText(
