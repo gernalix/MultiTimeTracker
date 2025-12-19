@@ -1,4 +1,4 @@
-// v12
+// v13
 package com.example.multitimetracker
 
 import android.content.Context
@@ -376,8 +376,26 @@ class MainViewModel : ViewModel() {
     fun addTask(name: String, tagIds: Set<Long>) {
         if (name.isBlank()) return
         _state.update { current ->
+            val now = System.currentTimeMillis()
             val task = engine.createTask(name.trim(), tagIds)
-            current.copy(tasks = current.tasks + task)
+            val withTask = current.tasks + task
+
+            // Requirement: a task starts automatically immediately after being created.
+            // We reuse the same toggle logic used by the UI so tag timers are also started.
+            val result = engine.toggleTask(
+                tasks = withTask,
+                tags = current.tags,
+                taskId = task.id,
+                nowMs = now
+            )
+
+            current.copy(
+                tasks = result.tasks,
+                tags = result.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
         persist()
         scheduleAutoBackup()

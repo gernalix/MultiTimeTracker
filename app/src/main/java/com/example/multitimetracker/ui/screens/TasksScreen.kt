@@ -1,4 +1,4 @@
-// v14
+// v15
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -45,10 +45,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.model.Tag
@@ -85,6 +89,8 @@ fun TasksScreen(
 
     val context = LocalContext.current
     val engine = remember { TimeEngine() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
 
@@ -112,6 +118,16 @@ fun TasksScreen(
                 selectedTagFilters.all { task.tagIds.contains(it) }
 
         matchesQuery && matchesTags
+    }
+
+    // Requirements:
+    // - running tasks on top
+    // - newest to oldest
+    val orderedTasks = remember(filteredTasks) {
+        filteredTasks.sortedWith(
+            compareByDescending<com.example.multitimetracker.model.Task> { it.isRunning }
+                .thenByDescending { it.id }
+        )
     }
 
     Scaffold(
@@ -153,7 +169,14 @@ fun TasksScreen(
         Column(
             modifier = Modifier
                 .padding(inner)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = {
+                        // Hide keyboard when the user taps outside inputs.
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                    })
+                },
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Search
@@ -203,12 +226,13 @@ fun TasksScreen(
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredTasks, key = { it.id }) { task ->
+                items(orderedTasks, key = { it.id }) { task ->
                     TaskRow(
                         tagColors = tagColors,
                         task = task,
                         tags = state.tags,
                         nowMs = state.nowMs,
+                        highlightRunning = task.isRunning,
                         onToggle = { onToggleTask(task.id) },
                         onOpenHistory = { openedTaskId = task.id },
                         trailing = {
@@ -233,6 +257,8 @@ fun TasksScreen(
             onAddTag = onAddTag,
             onConfirm = { name, tagIds ->
                 onAddTask(name, tagIds)
+                focusManager.clearFocus()
+                keyboardController?.hide()
                 showAdd = false
             }
         )
@@ -440,6 +466,9 @@ private fun AddTaskDialog(
     var newTagName by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
 
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nuovo task") },
@@ -482,6 +511,9 @@ private fun AddTaskDialog(
                             if (t.isNotEmpty()) {
                                 onAddTag(t)
                                 newTagName = ""
+                                // After adding a tag, keep the UI clean.
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
                             }
                         }
                     ) { Text("Aggiungi") }
@@ -489,10 +521,18 @@ private fun AddTaskDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(name, selected) }) { Text("Crea") }
+            Button(onClick = {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                onConfirm(name, selected)
+            }) { Text("Crea") }
         },
         dismissButton = {
-            Button(onClick = onDismiss) { Text("Annulla") }
+            Button(onClick = {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                onDismiss()
+            }) { Text("Annulla") }
         }
     )
 }

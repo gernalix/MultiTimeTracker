@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.clickable
@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ fun TaskRow(
     task: Task,
     tags: List<Tag>,
     nowMs: Long,
+    highlightRunning: Boolean,
     onToggle: () -> Unit,
     onOpenHistory: () -> Unit,
     trailing: @Composable () -> Unit
@@ -41,7 +43,17 @@ fun TaskRow(
     val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
     val taskTags = tags.filter { task.tagIds.contains(it.id) }
 
-    Card(modifier = Modifier.fillMaxWidth().clickable { onOpenHistory() }) {
+    val runningBg = remember { Color(0xFFCCFFCC) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenHistory() },
+        colors = if (highlightRunning && task.isRunning) {
+            CardDefaults.cardColors(containerColor = runningBg)
+        } else {
+            CardDefaults.cardColors()
+        }
+    ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
