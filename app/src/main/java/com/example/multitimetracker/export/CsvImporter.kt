@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -22,6 +22,11 @@ import com.example.multitimetracker.model.Task
  */
 object CsvImporter {
 
+    private data class DictPayload(
+        val tasks: List<Task>,
+        val tags: List<Tag>
+    )
+
     data class ImportedSnapshot(
         val tasks: List<Task>,
         val tags: List<Tag>,
@@ -35,7 +40,7 @@ object CsvImporter {
         val byName = uris.associateBy { uri -> displayName(context, uri) ?: uri.lastPathSegment.orEmpty() }
 
         val dictUri = byName["dict.json"]
-        val dict = dictUri?.let { parseDictJson(readText(context, it)) }
+        val dict: DictPayload? = dictUri?.let { uri -> parseDictJson(readText(context, uri)) }
 
         val taskSessions = byName["sessions.csv"]?.let { parseTaskSessions(readLines(context, it)) } ?: emptyList()
         val tagSessions = byName["tag_sessions.csv"]?.let { parseTagSessions(readLines(context, it)) } ?: emptyList()
@@ -60,7 +65,7 @@ object CsvImporter {
      */
     fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapshot {
         val dictDoc = dir.findFile("dict.json")
-        val dict = dictDoc?.let { doc ->
+        val dict: DictPayload? = dictDoc?.let { doc: DocumentFile ->
             if (!doc.canRead()) null else runCatching { parseDictJson(readText(context, doc.uri)) }.getOrNull()
         }
 
@@ -184,6 +189,67 @@ object CsvImporter {
             if (idx < 0) return null
             return it.getString(idx)
         }
+    }
+
+    private fun readText(context: Context, uri: Uri): String {
+        val cr = context.contentResolver
+        cr.openInputStream(uri).use { input ->
+            if (input == null) throw IllegalArgumentException("Impossibile leggere file: $uri")
+            return input.bufferedReader(Charsets.UTF_8).readText()
+        }
+    }
+
+    private fun parseDictJson(text: String): DictPayload {
+        val root = JSONObject(text)
+
+        val tagsJson = root.optJSONArray("tags") ?: JSONArray()
+        val tags = ArrayList<Tag>(tagsJson.length())
+        for (i in 0 until tagsJson.length()) {
+            val o = tagsJson.optJSONObject(i) ?: continue
+            val id = o.optLong("id", Long.MIN_VALUE)
+            val name = o.optString("name", "").trim()
+            if (id == Long.MIN_VALUE || name.isBlank()) continue
+            tags.add(
+                Tag(
+                    id = id,
+                    name = name,
+                    activeChildrenCount = 0,
+                    totalMs = 0L,
+                    lastStartedAtMs = null
+                )
+            )
+        }
+
+        val tasksJson = root.optJSONArray("tasks") ?: JSONArray()
+        val tasks = ArrayList<Task>(tasksJson.length())
+        for (i in 0 until tasksJson.length()) {
+            val o = tasksJson.optJSONObject(i) ?: continue
+            val id = o.optLong("id", Long.MIN_VALUE)
+            val name = o.optString("name", "").trim()
+            if (id == Long.MIN_VALUE || name.isBlank()) continue
+
+            val tagIdsJson = o.optJSONArray("tagIds")
+            val tagIds = LinkedHashSet<Long>()
+            if (tagIdsJson != null) {
+                for (j in 0 until tagIdsJson.length()) {
+                    val v = tagIdsJson.optLong(j, Long.MIN_VALUE)
+                    if (v != Long.MIN_VALUE) tagIds.add(v)
+                }
+            }
+
+            tasks.add(
+                Task(
+                    id = id,
+                    name = name,
+                    tagIds = tagIds,
+                    isRunning = false,
+                    totalMs = 0L,
+                    lastStartedAtMs = null
+                )
+            )
+        }
+
+        return DictPayload(tasks = tasks, tags = tags)
     }
 
     private fun readLines(context: Context, uri: Uri): List<String> {
