@@ -1,4 +1,4 @@
-// v4
+// v6
 package com.example.multitimetracker.widget
 
 import android.app.PendingIntent
@@ -6,6 +6,10 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.RemoteViews
 import android.widget.Toast
 import com.example.multitimetracker.R
@@ -126,6 +130,31 @@ class QuickTaskWidgetProvider : AppWidgetProvider() {
 
             Toast.makeText(context, "Quick task avviato", Toast.LENGTH_SHORT).show()
         }
+
+        private fun vibrateClick(context: Context) {
+            runCatching {
+                val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                    vm.defaultVibrator
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                }
+
+                if (vibrator?.hasVibrator() == true) {
+                    // Prefer a predefined haptic effect when available.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        // Slightly longer than before; some devices ignore ultra-short pulses.
+                        vibrator.vibrate(VibrationEffect.createOneShot(80, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(80)
+                    }
+                }
+            }
+        }
     }
 
     override fun onUpdate(
@@ -139,6 +168,7 @@ class QuickTaskWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_QUICK_TASK_CLICK) {
+            vibrateClick(context.applicationContext)
             runCatching { runQuickTask(context.applicationContext) }
                 .onFailure { e ->
                     Toast.makeText(context, "Quick task fallito: ${e.message}", Toast.LENGTH_LONG).show()
