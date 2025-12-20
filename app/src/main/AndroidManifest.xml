@@ -1,4 +1,4 @@
-<!-- v5 -->
+<!-- v6 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -30,6 +30,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".widget.QuickTaskWidgetClickActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MultiTimeTracker.Transparent"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="" />
 
         <service
             android:name=".TrackingForegroundService"

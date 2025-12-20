@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker.widget
 
 import android.app.PendingIntent
@@ -22,15 +22,20 @@ class QuickTaskWidgetProvider : AppWidgetProvider() {
 
     companion object {
         private const val ACTION_QUICK_TASK_CLICK = "com.example.multitimetracker.widget.ACTION_QUICK_TASK_CLICK"
+        private const val EXTRA_FROM_ACTIVITY = "com.example.multitimetracker.widget.EXTRA_FROM_ACTIVITY"
 
         // Dynamic receiver inside the app uses this to refresh UI when the widget writes a new snapshot.
         const val ACTION_SNAPSHOT_CHANGED = "com.example.multitimetracker.ACTION_SNAPSHOT_CHANGED"
 
         private fun buildClickIntent(context: Context): PendingIntent {
-            val intent = Intent(context, QuickTaskWidgetProvider::class.java).apply {
-                action = ACTION_QUICK_TASK_CLICK
+            val intent = Intent(context, QuickTaskWidgetClickActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                )
             }
-            return PendingIntent.getBroadcast(
+            return PendingIntent.getActivity(
                 context,
                 0,
                 intent,
@@ -127,8 +132,6 @@ class QuickTaskWidgetProvider : AppWidgetProvider() {
 
             // If the app is already open, this makes it reload the snapshot.
             notifySnapshotChanged(context)
-
-            Toast.makeText(context, "Quick task avviato", Toast.LENGTH_SHORT).show()
         }
 
         private fun vibrateClick(context: Context) {
@@ -168,10 +171,22 @@ class QuickTaskWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_QUICK_TASK_CLICK) {
-            vibrateClick(context.applicationContext)
-            runCatching { runQuickTask(context.applicationContext) }
+            val appCtx = context.applicationContext
+            val fromActivity = intent.getBooleanExtra(EXTRA_FROM_ACTIVITY, false)
+            if (!fromActivity) {
+                vibrateClick(appCtx)
+            }
+            runCatching { runQuickTask(appCtx) }
+                .onSuccess {
+                    if (!fromActivity) {
+                        Toast.makeText(appCtx, "Quick task avviato", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 .onFailure { e ->
-                    Toast.makeText(context, "Quick task fallito: ${e.message}", Toast.LENGTH_LONG).show()
+                    // If the Activity is being used, it will already have shown a toast.
+                    if (!fromActivity) {
+                        Toast.makeText(appCtx, "Quick task fallito: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
                 }
         }
     }
