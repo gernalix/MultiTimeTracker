@@ -368,7 +368,8 @@ fun reloadFromSnapshot(context: Context) {
             tasks = snapshot.tasks,
             tags = snapshot.tags,
             importedTaskSessions = snapshot.taskSessions,
-            importedTagSessions = snapshot.tagSessions
+            importedTagSessions = snapshot.tagSessions,
+                    runtimeSnapshot = snapshot.runtimeSnapshot
         )
 
         _state.update {
@@ -436,9 +437,17 @@ fun reloadFromSnapshot(context: Context) {
     }
 
     fun addTag(name: String) {
-        if (name.isBlank()) return
+        val n = name.trim()
+        if (n.isBlank()) return
+
+        val already = _state.value.tags.any { it.name.equals(n, ignoreCase = true) }
+        if (already) {
+            _ctx?.let { Toast.makeText(it, "tag già esiste", Toast.LENGTH_SHORT).show() }
+            return
+        }
+
         _state.update { current ->
-            val tag = engine.createTag(name.trim())
+            val tag = engine.createTag(n)
             current.copy(tags = current.tags + tag)
         }
         persist()
@@ -455,7 +464,7 @@ fun reloadFromSnapshot(context: Context) {
     }
 
 
-    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>, link: String) {
+    fun updateTask(taskId: Long, newName: String, newTagIds: Set<Long>, link: String) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val result = engine.reassignTaskTags(
@@ -463,6 +472,7 @@ fun reloadFromSnapshot(context: Context) {
                 tags = current.tags,
                 taskId = taskId,
                 newTagIds = newTagIds,
+                newName = newName,
                 newLink = link.trim(),
                 nowMs = now
             )
@@ -502,6 +512,13 @@ fun reloadFromSnapshot(context: Context) {
         persist()
         scheduleAutoBackup()
     }
+
+    // Backward compatible call sites
+    fun updateTaskTags(taskId: Long, newTagIds: Set<Long>, link: String) {
+        val curName = _state.value.tasks.firstOrNull { it.id == taskId }?.name ?: ""
+        updateTask(taskId = taskId, newName = curName, newTagIds = newTagIds, link = link)
+    }
+
 
     fun deleteTag(tagId: Long) {
         _state.update { current ->
@@ -557,7 +574,8 @@ fun exportCsv(context: Context) {
                     tasks = snapshot.tasks,
                     tags = snapshot.tags,
                     importedTaskSessions = snapshot.taskSessions,
-                    importedTagSessions = snapshot.tagSessions
+                    importedTagSessions = snapshot.tagSessions,
+                    runtimeSnapshot = snapshot.runtimeSnapshot
                 )
 
                 _state.update {

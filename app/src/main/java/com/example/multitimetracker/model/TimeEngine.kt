@@ -107,6 +107,7 @@ class TimeEngine {
         tags: List<Tag>,
         taskId: Long,
         newTagIds: Set<Long>,
+        newName: String? = null,
         newLink: String? = null,
         nowMs: Long = System.currentTimeMillis()
     ): EngineResult {
@@ -125,7 +126,11 @@ class TimeEngine {
             added.forEach { tagId -> newTags = startTagForTask(task, newTags, tagId, nowMs) }
         }
 
-        val updatedTask = task.copy(tagIds = newTagIds, link = newLink ?: task.link)
+        val updatedTask = task.copy(
+            name = (newName ?: task.name).trim().ifEmpty { task.name },
+            tagIds = newTagIds,
+            link = newLink ?: task.link
+        )
         val newTasks = tasks.toMutableList().also { it[idx] = updatedTask }.toList()
 
         return EngineResult(newTasks, newTags)
@@ -184,13 +189,12 @@ class TimeEngine {
         tasks: List<Task>,
         tags: List<Tag>,
         importedTaskSessions: List<TaskSession>,
-        importedTagSessions: List<TagSession>
+        importedTagSessions: List<TagSession>,
+        runtimeSnapshot: RuntimeSnapshot? = null
     ) {
-        // reset runtime
+        // reset runtime + sessions
         activeTaskStart.clear()
         activeTagStart.clear()
-
-        // reset sessions
         taskSessions.clear()
         taskSessions.addAll(importedTaskSessions)
         tagSessions.clear()
@@ -199,6 +203,26 @@ class TimeEngine {
         // update id generators so that new entities won't collide
         nextTaskId = (tasks.maxOfOrNull { it.id } ?: 0L) + 1L
         nextTagId = (tags.maxOfOrNull { it.id } ?: 0L) + 1L
+
+        // restore runtime snapshot if present
+        if (runtimeSnapshot != null) {
+            importRuntimeSnapshot(
+                tasks = tasks,
+                tags = tags,
+                taskSessionsSnapshot = importedTaskSessions,
+                tagSessionsSnapshot = importedTagSessions,
+                snapshot = runtimeSnapshot
+            )
+        } else {
+            // best-effort: rebuild runtime from imported tasks (so STOP works correctly)
+            tasks.filter { it.isRunning && it.lastStartedAtMs != null }.forEach { t ->
+                val start = t.lastStartedAtMs ?: return@forEach
+                activeTaskStart[t.id] = start
+                t.tagIds.forEach { tagId ->
+                    activeTagStart[TagKey(taskId = t.id, tagId = tagId)] = start
+                }
+            }
+        }
     }
 
     fun clearSessions() {

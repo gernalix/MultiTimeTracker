@@ -74,6 +74,7 @@ fun TagsScreen(
     var openedTagId by remember { mutableStateOf<Long?>(null) }
     var editingTagId by remember { mutableStateOf<Long?>(null) }
     var showAdd by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val engine = remember { TimeEngine() }
 
@@ -138,7 +139,14 @@ fun TagsScreen(
             confirmText = "Crea",
             onDismiss = { showAdd = false },
             onConfirm = { name ->
-                onAddTag(name)
+                val n = name.trim()
+                if (n.isEmpty()) return@AddOrRenameTagDialog
+                val exists = state.tags.any { it.name.equals(n, ignoreCase = true) }
+                if (exists) {
+                    Toast.makeText(context, "tag già esiste", Toast.LENGTH_SHORT).show()
+                    return@AddOrRenameTagDialog
+                }
+                onAddTag(n)
                 showAdd = false
             }
         )

@@ -86,7 +86,7 @@ object CsvExporter {
         // 5° file: dict.json (anagrafica task/tag + associazioni task↔tag), leggibile da umani.
         writeTextToDir(context, dir, "application/json", "dict.json") { w ->
             val root = JSONObject()
-            root.put("schema_version", 1)
+            root.put("schema_version", 2)
             root.put("exported_at", System.currentTimeMillis())
 
             val tagsArr = JSONArray()
@@ -94,6 +94,8 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
+                o.put("totalMs", t.totalMs)
+                o.put("lastStartedAtMs", t.lastStartedAtMs ?: JSONObject.NULL)
                 tagsArr.put(o)
             }
             root.put("tags", tagsArr)
@@ -103,6 +105,10 @@ object CsvExporter {
                 val o = JSONObject()
                 o.put("id", t.id)
                 o.put("name", t.name)
+                o.put("link", t.link)
+                o.put("isRunning", t.isRunning)
+                o.put("totalMs", t.totalMs)
+                o.put("lastStartedAtMs", t.lastStartedAtMs ?: JSONObject.NULL)
                 val tagIdsArr = JSONArray()
                 t.tagIds.sorted().forEach { tagIdsArr.put(it) }
                 o.put("tagIds", tagIdsArr)

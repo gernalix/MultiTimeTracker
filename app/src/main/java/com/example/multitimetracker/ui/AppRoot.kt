@@ -56,7 +56,7 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     onToggleTask = vm::toggleTask,
                     onAddTask = vm::addTask,
                     onAddTag = vm::addTag,
-                    onEditTaskTags = vm::updateTaskTags,
+                    onEditTask = vm::updateTask,
                     onDeleteTask = vm::deleteTask,
                     onExport = vm::exportBackup,
                     onImport = vm::importBackup,

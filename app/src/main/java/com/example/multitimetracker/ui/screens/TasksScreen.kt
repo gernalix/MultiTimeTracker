@@ -78,7 +78,7 @@ fun TasksScreen(
     onToggleTask: (Long) -> Unit,
     onAddTask: (String, Set<Long>, String) -> Unit,
     onAddTag: (String) -> Unit,
-    onEditTaskTags: (Long, Set<Long>, String) -> Unit,
+    onEditTask: (Long, String, Set<Long>, String) -> Unit,
     onDeleteTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
@@ -342,11 +342,12 @@ fun TasksScreen(
             EditTaskDialog(
                 title = "Modifica task",
                 tags = state.tags,
+                initialName = task.name,
                 initialSelection = task.tagIds,
                 initialLink = task.link,
                 onDismiss = { editingTaskId = null },
-                onConfirm = { newTags, newLink ->
-                    onEditTaskTags(editId, newTags, newLink)
+                onConfirm = { newName, newTags, newLink ->
+                    onEditTask(editId, newName, newTags, newLink)
                     editingTaskId = null
                 }
             )
@@ -579,11 +580,13 @@ private fun AddTaskDialog(
 private fun EditTaskDialog(
     title: String,
     tags: List<Tag>,
+    initialName: String,
     initialSelection: Set<Long>,
     initialLink: String,
     onDismiss: () -> Unit,
-    onConfirm: (Set<Long>, String) -> Unit
+    onConfirm: (String, Set<Long>, String) -> Unit
 ) {
+    var name by remember { mutableStateOf(initialName) }
     var selected by remember { mutableStateOf(initialSelection) }
     var link by remember { mutableStateOf(initialLink) }
 
@@ -592,6 +595,14 @@ private fun EditTaskDialog(
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nome task") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 OutlinedTextField(
                     value = link,
                     onValueChange = { link = it },
@@ -627,7 +638,7 @@ private fun EditTaskDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selected, link) }) { Text("Salva") }
+            Button(onClick = { onConfirm(name, selected, link) }) { Text("Salva") }
         },
         dismissButton = {
             Button(onClick = onDismiss) { Text("Chiudi") }

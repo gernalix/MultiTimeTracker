@@ -31,7 +31,8 @@ object CsvImporter {
         val tasks: List<Task>,
         val tags: List<Tag>,
         val taskSessions: List<TaskSession>,
-        val tagSessions: List<TagSession>
+        val tagSessions: List<TagSession>,
+        val runtimeSnapshot: TimeEngine.RuntimeSnapshot?
     )
 
     fun importFromUris(context: Context, uris: List<Uri>): ImportedSnapshot {
@@ -167,17 +168,35 @@ object CsvImporter {
         // Apply totals
         val tasks = tasksById.values
             .sortedBy { it.id }
-            .map { t -> t.copy(totalMs = taskTotals[t.id] ?: 0L, isRunning = false, lastStartedAtMs = null) }
+            .map { t -> t.copy(totalMs = taskTotals[t.id] ?: t.totalMs) }
 
         val tags = tagsById.values
             .sortedBy { it.id }
-            .map { t -> t.copy(totalMs = tagTotals[t.id] ?: 0L, activeChildrenCount = 0, lastStartedAtMs = null) }
+            .map { t -> t.copy(totalMs = tagTotals[t.id] ?: t.totalMs, activeChildrenCount = 0) }
+
+        val activeTaskStart = tasks
+            .filter { it.isRunning && it.lastStartedAtMs != null }
+            .associate { it.id to (it.lastStartedAtMs ?: 0L) }
+
+        val activeTagStart = tasks
+            .filter { it.isRunning && it.lastStartedAtMs != null }
+            .flatMap { t ->
+                val start = t.lastStartedAtMs ?: return@flatMap emptyList()
+                t.tagIds.map { tagId -> Triple(t.id, tagId, start) }
+            }
+
+        val runtime = if (activeTaskStart.isEmpty() && activeTagStart.isEmpty()) {
+            null
+        } else {
+            TimeEngine.RuntimeSnapshot(activeTaskStart = activeTaskStart, activeTagStart = activeTagStart)
+        }
 
         return ImportedSnapshot(
             tasks = tasks,
             tags = tags,
             taskSessions = taskSessions,
-            tagSessions = tagSessions
+            tagSessions = tagSessions,
+            runtimeSnapshot = runtime
         )
     }
 
@@ -212,13 +231,15 @@ object CsvImporter {
             val name = o.optString("name", "").trim()
             val link = o.optString("link", "").trim()
             if (id == Long.MIN_VALUE || name.isBlank()) continue
+            val totalMs = o.optLong("totalMs", 0L)
+            val lastStarted = if (o.isNull("lastStartedAtMs")) null else o.optLong("lastStartedAtMs")
             tags.add(
                 Tag(
                     id = id,
                     name = name,
                     activeChildrenCount = 0,
-                    totalMs = 0L,
-                    lastStartedAtMs = null
+                    totalMs = totalMs,
+                    lastStartedAtMs = lastStarted
                 )
             )
         }
@@ -241,15 +262,18 @@ object CsvImporter {
                 }
             }
 
+            val isRunning = o.optBoolean("isRunning", false)
+            val totalMs = o.optLong("totalMs", 0L)
+            val lastStarted = if (o.isNull("lastStartedAtMs")) null else o.optLong("lastStartedAtMs")
             tasks.add(
                 Task(
                     id = id,
                     name = name,
                     link = taskLink,
                     tagIds = tagIds,
-                    isRunning = false,
-                    totalMs = 0L,
-                    lastStartedAtMs = null
+                    isRunning = isRunning,
+                    totalMs = totalMs,
+                    lastStartedAtMs = lastStarted
                 )
             )
         }
