@@ -6,6 +6,7 @@ import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -24,7 +25,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,12 +73,12 @@ fun TagsScreen(
     state: UiState,
     onAddTag: (String) -> Unit,
     onRenameTag: (Long, String) -> Unit,
-    onDeleteTag: (Long) -> Unit
+    onDeleteTag: (Long, Boolean) -> Unit,
+    onRestoreTag: (Long) -> Unit,
+    onPurgeTag: (Long) -> Unit
 ) {
     var deletingTagId by remember { mutableStateOf<Long?>(null) }
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedTagIds by remember { mutableStateOf(setOf<Long>()) }
-    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
+    var showTrash by remember { mutableStateOf(false) }
     var openedTagId by remember { mutableStateOf<Long?>(null) }
     var editingTagId by remember { mutableStateOf<Long?>(null) }
     var showAdd by remember { mutableStateOf(false) }
@@ -86,69 +86,47 @@ fun TagsScreen(
 
     val engine = remember { TimeEngine() }
 
-    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
+    val visibleTags = remember(state.tags) { state.tags.filter { !it.isDeleted } }
+    val visibleTasks = remember(state.tasks) { state.tasks.filter { !it.isDeleted } }
+
+    val tagColors = remember(visibleTags) { assignDistinctTagColors(visibleTags) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = {
-                    if (selectionMode) {
-                        Text("Selezionati: ${selectedTagIds.size}")
-                    } else {
-                        Text("Tags")
-                    }
-                },
+                title = { Text("Tags") },
                 actions = {
-                    if (selectionMode) {
-                        IconButton(
-                            onClick = {
-                                if (selectedTagIds.isNotEmpty()) showDeleteSelectedDialog = true
-                            }
-                        ) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
-                        }
-                        TextButton(
-                            onClick = {
-                                selectionMode = false
-                                selectedTagIds = emptySet()
-                            }
-                        ) { Text("Fine") }
+                    IconButton(onClick = { showTrash = true }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Trash")
                     }
                 }
             )
         },
         floatingActionButton = {
-            if (!selectionMode) {
-                FloatingActionButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add tag")
-                }
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Add tag")
             }
         }
     ) { inner ->
+        val orderedTags = remember(visibleTags, visibleTasks) {
+            visibleTags.sortedWith(
+                compareByDescending<Tag> { tag ->
+                    visibleTasks.any { it.isRunning && it.tagIds.contains(tag.id) }
+                }.thenBy { it.name.lowercase() }
+            )
+        }
+
         LazyColumn(
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val totalTags = state.tags.size
-            val activeTags = state.tags.count { tag ->
-                state.tasks.any { it.isRunning && it.tagIds.contains(tag.id) }
-            }
-
-            item(key = "tags_header") {
-                Text(
-                    text = "$totalTags tag totali, $activeTags attivi",
-                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 12.dp)
-                )
-            }
-
-            items(state.tags, key = { it.id }) { tag ->
+            items(orderedTags, key = { it.id }) { tag ->
                 // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
                 // (le sovrapposizioni contano una sola volta)
-                val feedingTasks = state.tasks.filter { it.tagIds.contains(tag.id) }
+                val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
                 val feedingTaskIds = feedingTasks.map { it.id }.toSet()
 
                 val closedIntervals = state.taskSessions
@@ -168,54 +146,27 @@ fun TagsScreen(
                 val runningCount = feedingTasks.count { it.isRunning }
                 val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
 
-                val isSelected = selectedTagIds.contains(tag.id)
+                val sharedTagIds = feedingTasks
+                    .asSequence()
+                    .flatMap { it.tagIds.asSequence() }
+                    .filter { it != tag.id }
+                    .toSet()
+                    .intersect(visibleTags.map { it.id }.toSet())
+                val sharedCount = sharedTagIds.size
 
                 TagRow(
                     color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
                     tag = tag,
                     shownMs = shownMs,
                     runningText = runningText,
-                    selectionMode = selectionMode,
-                    selected = isSelected,
-                    onClick = {
-                        if (selectionMode) {
-                            selectedTagIds = if (isSelected) selectedTagIds - tag.id else selectedTagIds + tag.id
-                            if (selectedTagIds.isEmpty()) selectionMode = false
-                        } else {
-                            openedTagId = tag.id
-                        }
-                    },
-                    onLongPress = {
-                        if (!selectionMode) selectionMode = true
-                        selectedTagIds = if (isSelected) (selectedTagIds - tag.id) else (selectedTagIds + tag.id)
-                    },
+                    highlightRunning = runningCount > 0,
+                    sharedCount = sharedCount,
                     onOpen = { openedTagId = tag.id },
                     onEdit = { editingTagId = tag.id },
                     onDelete = { deletingTagId = tag.id }
                 )
             }
         }
-    }
-
-    // Delete selected tags
-    if (showDeleteSelectedDialog) {
-        val count = selectedTagIds.size
-        AlertDialog(
-            onDismissRequest = { showDeleteSelectedDialog = false },
-            title = { Text("Elimina tag") },
-            text = { Text("Eliminare $count tag selezionati?") },
-            confirmButton = {
-                Button(onClick = {
-                    selectedTagIds.forEach { onDeleteTag(it) }
-                    showDeleteSelectedDialog = false
-                    selectionMode = false
-                    selectedTagIds = emptySet()
-                }) { Text("Elimina") }
-            },
-            dismissButton = {
-                Button(onClick = { showDeleteSelectedDialog = false }) { Text("Annulla") }
-            }
-        )
     }
 
     // Add tag
@@ -264,7 +215,7 @@ fun TagsScreen(
     if (openId != null) {
         val tag = state.tags.firstOrNull { it.id == openId }
         if (tag != null) {
-            val tasksWithTag = state.tasks
+            val tasksWithTag = visibleTasks
                 .filter { it.tagIds.contains(openId) }
                 .sortedWith(
                     compareByDescending<Task> { it.isRunning }
@@ -302,22 +253,72 @@ fun TagsScreen(
         }
     }
 
-    // Delete dialog
+    // Trash (soft-deleted tags)
+    if (showTrash) {
+        val trashed = state.tags
+            .filter { it.isDeleted }
+            .sortedByDescending { it.deletedAtMs ?: 0L }
+
+        AlertDialog(
+            onDismissRequest = { showTrash = false },
+            title = { Text("Cestino (Tags)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (trashed.isEmpty()) {
+                        Text("Cestino vuoto.")
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.heightIn(max = 420.dp)
+                        ) {
+                            items(trashed, key = { it.id }) { t ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(t.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+                                        Text("id=${t.id}", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Button(onClick = { onRestoreTag(t.id) }) { Text("Ripristina") }
+                                        Button(onClick = { onPurgeTag(t.id) }) { Text("Elimina") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = { showTrash = false }) { Text("Chiudi") } }
+        )
+    }
+
+    // Delete dialog (choose semantics)
     val delId = deletingTagId
     if (delId != null) {
-        val tag = state.tags.firstOrNull { it.id == delId }
+        val tag = visibleTags.firstOrNull { it.id == delId }
         if (tag != null) {
+            val childrenCount = visibleTasks.count { it.tagIds.contains(delId) }
             AlertDialog(
                 onDismissRequest = { deletingTagId = null },
                 title = { Text("Elimina tag") },
-                text = { Text("Vuoi eliminare '${tag.name}'? Verrà rimosso anche da tutti i task.") },
+                text = {
+                    val suffix = if (childrenCount > 0) " ($childrenCount task associati)" else ""
+                    Text("Cosa vuoi eliminare per '${tag.name}'?$suffix")
+                },
                 confirmButton = {
-                    Button(
-                        onClick = {
-                            onDeleteTag(delId)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            onDeleteTag(delId, false)
                             deletingTagId = null
-                        }
-                    ) { Text("Elimina") }
+                        }) { Text("Solo tag") }
+                        Button(onClick = {
+                            onDeleteTag(delId, true)
+                            deletingTagId = null
+                        }) { Text("Tag + task") }
+                    }
                 },
                 dismissButton = {
                     Button(onClick = { deletingTagId = null }) { Text("Annulla") }

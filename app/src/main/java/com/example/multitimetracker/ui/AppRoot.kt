@@ -1,4 +1,4 @@
-// v6
+// v8
 package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
@@ -57,7 +57,9 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     onAddTask = vm::addTask,
                     onAddTag = vm::addTag,
                     onEditTask = vm::updateTask,
-                    onDeleteTask = { id, deleteSessions -> vm.deleteTask(id, deleteSessions) },
+                    onDeleteTask = vm::deleteTask,
+                    onRestoreTask = vm::restoreTask,
+                    onPurgeTask = vm::purgeTask,
                     onExport = vm::exportBackup,
                     onImport = vm::importBackup,
                     onSetBackupRootFolder = vm::setBackupRootFolder
@@ -68,7 +70,9 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     state = state,
                     onAddTag = vm::addTag,
                     onRenameTag = vm::renameTag,
-                    onDeleteTag = vm::deleteTag
+                    onDeleteTag = vm::deleteTag,
+                    onRestoreTag = vm::restoreTag,
+                    onPurgeTag = vm::purgeTag
                 )
             }
         }

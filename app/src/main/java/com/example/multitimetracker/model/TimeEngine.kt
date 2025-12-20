@@ -43,6 +43,8 @@ class TimeEngine {
     fun createTag(name: String): Tag = Tag(
         id = nextTagId++,
         name = name,
+        isDeleted = false,
+        deletedAtMs = null,
         activeChildrenCount = 0,
         totalMs = 0L,
         lastStartedAtMs = null
@@ -53,6 +55,8 @@ class TimeEngine {
         name = name,
         link = link,
         tagIds = tagIds,
+        isDeleted = false,
+        deletedAtMs = null,
         isRunning = false,
         totalMs = 0L,
         lastStartedAtMs = null
@@ -85,6 +89,7 @@ class TimeEngine {
         if (idx < 0) return EngineResult(tasks, tags)
 
         val t = tasks[idx]
+        if (t.isDeleted) return EngineResult(tasks, tags)
         return if (t.isRunning) {
             stopTask(tasks, tags, t, nowMs)
         } else {
@@ -244,46 +249,106 @@ class TimeEngine {
         val t = tasks[idx]
         val stopped = if (t.isRunning) stopTask(tasks, tags, t, nowMs) else EngineResult(tasks, tags)
 
-        val newTasks = stopped.tasks.filterNot { it.id == taskId }
-        return EngineResult(newTasks, stopped.tags)
-    }
+        // Soft delete: keep item in list so IDs are never reused and we can offer a "Trash".
+        val newTasks = stopped.tasks.map { task ->
+            if (task.id == taskId) {
+                task.copy(isDeleted = true, deletedAtMs = nowMs, isRunning = false, lastStartedAtMs = null)
+            } else task
+        }
 
-    /**
-     * Rimuove tutte le sessioni (TaskSession + TagSession) associate a un task.
-     * Utile quando l'utente vuole cancellare il task *e* il suo storico.
-     */
-    fun purgeSessionsForTask(taskId: Long) {
-        taskSessions.removeAll { it.taskId == taskId }
-        tagSessions.removeAll { it.taskId == taskId }
-        activeTaskStart.remove(taskId)
-        activeTagStart.keys.filter { it.taskId == taskId }.forEach { activeTagStart.remove(it) }
+        // When a task is deleted, it should not keep tag counters running.
+        // stopTask already closed tag sessions if it was running.
+        return EngineResult(newTasks, stopped.tags)
     }
 
     fun deleteTag(
         tasks: List<Task>,
         tags: List<Tag>,
         tagId: Long,
+        deleteAssociatedTasks: Boolean = false,
         nowMs: Long = System.currentTimeMillis()
     ): EngineResult {
         var curTasks = tasks
         var curTags = tags
 
-        // Rimuove il tag da ogni task; se un task è running, chiude le TagSession coerentemente.
-        curTasks.filter { it.tagIds.contains(tagId) }.forEach { task ->
-            val res = reassignTaskTags(
-                tasks = curTasks,
-                tags = curTags,
-                taskId = task.id,
-                newTagIds = task.tagIds - tagId,
-                nowMs = nowMs
-            )
-            curTasks = res.tasks
-            curTags = res.tags
+        val tasksWithTag = curTasks.filter { !it.isDeleted && it.tagIds.contains(tagId) }
+
+        if (deleteAssociatedTasks) {
+            // Soft delete all tasks that currently have the tag.
+            tasksWithTag.forEach { task ->
+                val res = deleteTask(
+                    tasks = curTasks,
+                    tags = curTags,
+                    taskId = task.id,
+                    nowMs = nowMs
+                )
+                curTasks = res.tasks
+                curTags = res.tags
+            }
+        } else {
+            // Remove the tag from each task; if a task is running, close TagSessions coherently.
+            tasksWithTag.forEach { task ->
+                val res = reassignTaskTags(
+                    tasks = curTasks,
+                    tags = curTags,
+                    taskId = task.id,
+                    newTagIds = task.tagIds - tagId,
+                    nowMs = nowMs
+                )
+                curTasks = res.tasks
+                curTags = res.tags
+            }
         }
 
-        // Elimina il tag dalla lista.
-        curTags = curTags.filterNot { it.id == tagId }
+        // Soft delete the tag itself.
+        curTags = curTags.map { tag ->
+            if (tag.id == tagId) tag.copy(isDeleted = true, deletedAtMs = nowMs) else tag
+        }
         return EngineResult(curTasks, curTags)
+    }
+
+    fun restoreTask(tasks: List<Task>, taskId: Long): List<Task> {
+        return tasks.map { if (it.id == taskId) it.copy(isDeleted = false, deletedAtMs = null) else it }
+    }
+
+    fun restoreTag(tags: List<Tag>, tagId: Long): List<Tag> {
+        return tags.map { if (it.id == tagId) it.copy(isDeleted = false, deletedAtMs = null) else it }
+    }
+
+    fun purgeTask(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        taskId: Long
+    ): EngineResult {
+        // Remove runtime tracking
+        activeTaskStart.remove(taskId)
+        activeTagStart.keys.filter { it.taskId == taskId }.forEach { activeTagStart.remove(it) }
+
+        // Remove sessions
+        taskSessions.removeAll { it.taskId == taskId }
+        tagSessions.removeAll { it.taskId == taskId }
+
+        val newTasks = tasks.filterNot { it.id == taskId }
+        return EngineResult(newTasks, tags)
+    }
+
+    fun purgeTag(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        tagId: Long
+    ): EngineResult {
+        // Remove runtime tracking for that tag
+        activeTagStart.keys.filter { it.tagId == tagId }.forEach { activeTagStart.remove(it) }
+
+        // Remove sessions
+        tagSessions.removeAll { it.tagId == tagId }
+
+        // Remove the tag from all tasks (including deleted ones) to avoid dangling references
+        val updatedTasks = tasks.map { t ->
+            if (t.tagIds.contains(tagId)) t.copy(tagIds = t.tagIds - tagId) else t
+        }
+        val newTags = tags.filterNot { it.id == tagId }
+        return EngineResult(updatedTasks, newTags)
     }
 
 

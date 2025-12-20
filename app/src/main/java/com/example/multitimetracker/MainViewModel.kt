@@ -1,4 +1,4 @@
-// v20
+// v21
 package com.example.multitimetracker
 
 import android.content.Context
@@ -507,7 +507,7 @@ fun reloadFromSnapshot(context: Context) {
 
     
 
-    fun deleteTask(taskId: Long, deleteSessions: Boolean) {
+    fun deleteTask(taskId: Long) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val res = engine.deleteTask(
@@ -516,9 +516,6 @@ fun reloadFromSnapshot(context: Context) {
                 taskId = taskId,
                 nowMs = now
             )
-            if (deleteSessions) {
-                engine.purgeSessionsForTask(taskId)
-            }
             val updated = current.copy(
                 tasks = res.tasks,
                 tags = res.tags,
@@ -533,24 +530,20 @@ fun reloadFromSnapshot(context: Context) {
     }
 
     // Backward compatible call sites
-    fun deleteTask(taskId: Long) {
-        deleteTask(taskId, deleteSessions = false)
-    }
-
-    // Backward compatible call sites
     fun updateTaskTags(taskId: Long, newTagIds: Set<Long>, link: String) {
         val curName = _state.value.tasks.firstOrNull { it.id == taskId }?.name ?: ""
         updateTask(taskId = taskId, newName = curName, newTagIds = newTagIds, link = link)
     }
 
 
-    fun deleteTag(tagId: Long) {
+    fun deleteTag(tagId: Long, deleteAssociatedTasks: Boolean = false) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val res = engine.deleteTag(
                 tasks = current.tasks,
                 tags = current.tags,
                 tagId = tagId,
+                deleteAssociatedTasks = deleteAssociatedTasks,
                 nowMs = now
             )
             val updated = current.copy(
@@ -561,6 +554,52 @@ fun reloadFromSnapshot(context: Context) {
                 nowMs = now
             )
             updated
+        }
+        persist()
+        scheduleAutoBackup()
+    }
+
+    fun restoreTask(taskId: Long) {
+        _state.update { current ->
+            current.copy(tasks = engine.restoreTask(current.tasks, taskId), nowMs = System.currentTimeMillis())
+        }
+        persist()
+        scheduleAutoBackup()
+    }
+
+    fun restoreTag(tagId: Long) {
+        _state.update { current ->
+            current.copy(tags = engine.restoreTag(current.tags, tagId), nowMs = System.currentTimeMillis())
+        }
+        persist()
+        scheduleAutoBackup()
+    }
+
+    fun purgeTask(taskId: Long) {
+        _state.update { current ->
+            val res = engine.purgeTask(current.tasks, current.tags, taskId)
+            current.copy(
+                tasks = res.tasks,
+                tags = res.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = System.currentTimeMillis()
+            )
+        }
+        persist()
+        scheduleAutoBackup()
+    }
+
+    fun purgeTag(tagId: Long) {
+        _state.update { current ->
+            val res = engine.purgeTag(current.tasks, current.tags, tagId)
+            current.copy(
+                tasks = res.tasks,
+                tags = res.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = System.currentTimeMillis()
+            )
         }
         persist()
         scheduleAutoBackup()
@@ -578,11 +617,14 @@ fun exportCsv(context: Context) {
             return
         }
 
+        val activeTasks = state.value.tasks.filter { !it.isDeleted }
+        val activeTags = state.value.tags.filter { !it.isDeleted }
+
         val files = listOf(
             CsvExporter.exportTaskSessions(context, taskSessions),
             CsvExporter.exportTaskTotals(context, taskSessions),
             CsvExporter.exportTagSessions(context, tagSessions),
-            CsvExporter.exportTagTotals(context, state.value.tags, state.value.tasks, state.value.taskSessions, state.value.nowMs)
+            CsvExporter.exportTagTotals(context, activeTags, activeTasks, state.value.taskSessions, state.value.nowMs)
         )
 
         ShareUtils.shareFiles(context, files, title = "MultiTimeTracker export")

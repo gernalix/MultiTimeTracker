@@ -1,7 +1,7 @@
 // v6
 package com.example.multitimetracker.ui.components
 
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,20 +11,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import com.example.multitimetracker.model.Tag
 
 @Composable
@@ -33,23 +31,16 @@ fun TagRow(
     tag: Tag,
     shownMs: Long,
     runningText: String,
-    selectionMode: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit,
+    highlightRunning: Boolean,
+    sharedCount: Int,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val runningBg = remember { Color(0xFFCCFFCC) }
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onClick() },
-                    onLongPress = { onLongPress() }
-                )
-            }
+        modifier = Modifier.fillMaxWidth().clickable { onOpen() },
+        colors = if (highlightRunning) CardDefaults.cardColors(containerColor = runningBg) else CardDefaults.cardColors()
     ) {
         Row(
             modifier = Modifier
@@ -59,17 +50,14 @@ fun TagRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 AssistChip(
-                    onClick = { if (selectionMode) onClick() else onOpen() },
+                    onClick = { onOpen() },
                     label = { Text(tag.name, style = MaterialTheme.typography.titleMedium) },
                     colors = AssistChipDefaults.assistChipColors(containerColor = color.copy(alpha = 0.35f))
                 )
-                Text(runningText, style = MaterialTheme.typography.labelMedium)
+                val sharedSuffix = if (sharedCount > 0) " • ⛓ $sharedCount" else ""
+                Text(runningText + sharedSuffix, style = MaterialTheme.typography.labelMedium)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (selectionMode) {
-                    Checkbox(checked = selected, onCheckedChange = { onClick() })
-                    Spacer(Modifier.width(4.dp))
-                }
                 Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Filled.Edit, contentDescription = "Edit tag")

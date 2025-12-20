@@ -1,4 +1,4 @@
-// v18
+// v19
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -43,7 +43,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,18 +79,20 @@ fun TasksScreen(
     onAddTask: (String, Set<Long>, String) -> Unit,
     onAddTag: (String) -> Unit,
     onEditTask: (Long, String, Set<Long>, String) -> Unit,
-    onDeleteTask: (Long, Boolean) -> Unit,
+    onDeleteTask: (Long) -> Unit,
+    onRestoreTask: (Long) -> Unit,
+    onPurgeTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
     onSetBackupRootFolder: (Context, android.net.Uri) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
-    var deletingTaskId by remember { mutableStateOf<Long?>(null) }
+    var showTrash by remember { mutableStateOf(false) }
+    var openedTaskId by remember { mutableStateOf<Long?>(null) }
+
     var selectionMode by remember { mutableStateOf(false) }
     var selectedTaskIds by remember { mutableStateOf(setOf<Long>()) }
-    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
-    var openedTaskId by remember { mutableStateOf<Long?>(null) }
 
     var query by remember { mutableStateOf("") }
     var selectedTagFilters by remember { mutableStateOf(setOf<Long>()) }
@@ -104,7 +105,10 @@ fun TasksScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    val tagColors = remember(state.tags) { assignDistinctTagColors(state.tags) }
+    val visibleTags = remember(state.tags) { state.tags.filter { !it.isDeleted } }
+    val visibleTasks = remember(state.tasks) { state.tasks.filter { !it.isDeleted } }
+
+    val tagColors = remember(visibleTags) { assignDistinctTagColors(visibleTags) }
 
     var pendingAfterFolderPick by remember { mutableStateOf<(() -> Unit)?>(null) }
 
@@ -118,12 +122,12 @@ fun TasksScreen(
         }
     }
 
-    val filteredTasks = state.tasks.filter { task ->
+    val filteredTasks = visibleTasks.filter { task ->
         val q = query.trim()
         val matchesQuery =
             q.isBlank() ||
                 task.name.contains(q, ignoreCase = true) ||
-                state.tags.filter { task.tagIds.contains(it.id) }.any { it.name.contains(q, ignoreCase = true) }
+                visibleTags.filter { task.tagIds.contains(it.id) }.any { it.name.contains(q, ignoreCase = true) }
 
         val matchesTags =
             selectedTagFilters.isEmpty() ||
@@ -146,33 +150,22 @@ fun TasksScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = {
-                    if (selectionMode) {
-                        Text("Selezionati: ${selectedTaskIds.size}")
-                    } else {
-                        Text("Tasks")
-                    }
-                },
+                title = { Text("Tasks") },
                 actions = {
                     if (selectionMode) {
-                        IconButton(
-                            onClick = {
-                                if (selectedTaskIds.isNotEmpty()) showDeleteSelectedDialog = true
-                            }
-                        ) {
+                        IconButton(onClick = {
+                            // Delete selected immediately (send to trash)
+                            selectedTaskIds.forEach { onDeleteTask(it) }
+                            selectedTaskIds = emptySet()
+                            selectionMode = false
+                        }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
                         }
-                        TextButton(
-                            onClick = {
-                                selectionMode = false
-                                selectedTaskIds = emptySet()
-                            }
-                        ) {
-                            Text("Fine")
+                    } else {
+                        IconButton(onClick = { showTrash = true }) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Trash")
                         }
-                        return@TopAppBar
                     }
-
                     IconButton(onClick = {
                         // If backup folder not configured yet, ask once for a root folder.
                         if (BackupFolderStore.getTreeUri(context) == null) {
@@ -198,10 +191,8 @@ fun TasksScreen(
             )
         },
         floatingActionButton = {
-            if (!selectionMode) {
-                FloatingActionButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Add task")
-                }
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "Add task")
             }
         }
     ) { inner ->
@@ -220,7 +211,7 @@ fun TasksScreen(
         ) {
             val activeCount = state.tasks.count { it.isRunning }
             Text(
-                text = "${state.tasks.size} task totali, $activeCount attivi",
+                text = "$activeCount task attivi",
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
@@ -243,10 +234,10 @@ fun TasksScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (state.tags.isEmpty()) {
+                if (visibleTags.isEmpty()) {
                     AssistChip(onClick = { }, label = { Text("Nessun tag") })
                 } else {
-                    state.tags.forEach { tag ->
+                    visibleTags.forEach { tag ->
                         val selected = selectedTagFilters.contains(tag.id)
                         val base = tagColors[tag.id] ?: tagColorFromSeed(tag.name)
                         val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
@@ -278,7 +269,7 @@ fun TasksScreen(
                     TaskRow(
                         tagColors = tagColors,
                         task = task,
-                        tags = state.tags,
+                        tags = visibleTags,
                         nowMs = state.nowMs,
                         highlightRunning = task.isRunning,
                         selectionMode = selectionMode,
@@ -293,16 +284,11 @@ fun TasksScreen(
                         },
                         onLongPress = {
                             if (!selectionMode) selectionMode = true
-                            selectedTaskIds = if (isSelected) (selectedTaskIds - task.id) else (selectedTaskIds + task.id)
+                            selectedTaskIds = if (isSelected) selectedTaskIds - task.id else selectedTaskIds + task.id
                         },
                         onToggle = {
-                            if (!task.isRunning) {
-                                onToggleTask(task.id)
-                                scope.launch { listState.animateScrollToItem(0) }
-                            } else {
-                                onToggleTask(task.id)
-                                scope.launch { listState.animateScrollToItem(0) }
-                            }
+                            onToggleTask(task.id)
+                            scope.launch { listState.animateScrollToItem(0) }
                         },
                         trailing = {
                             if (task.link.isNotBlank()) {
@@ -313,7 +299,14 @@ fun TasksScreen(
                             IconButton(onClick = { editingTaskId = task.id }) {
                                 Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
                             }
-                            IconButton(onClick = { deletingTaskId = task.id }) {
+                            IconButton(onClick = {
+                                onDeleteTask(task.id)
+                                // If the user was selecting, keep the selection state coherent.
+                                if (selectionMode) {
+                                    selectedTaskIds = selectedTaskIds - task.id
+                                    if (selectedTaskIds.isEmpty()) selectionMode = false
+                                }
+                            }) {
                                 Icon(Icons.Filled.Delete, contentDescription = "Delete task")
                             }
                         }
@@ -326,7 +319,7 @@ fun TasksScreen(
     // Add task
     if (showAdd) {
         AddTaskDialog(
-            tags = state.tags,
+            tags = visibleTags,
             onDismiss = { showAdd = false },
             onAddTag = onAddTag,
             onConfirm = { name, tagIds, link ->
@@ -341,7 +334,7 @@ fun TasksScreen(
     // Task history
     val openId = openedTaskId
     if (openId != null) {
-        val task = state.tasks.firstOrNull { it.id == openId }
+        val task = state.tasks.firstOrNull { it.id == openId && !it.isDeleted }
         if (task != null) {
             TaskHistoryDialog(
                 taskName = task.name,
@@ -356,60 +349,45 @@ fun TasksScreen(
         }
     }
 
-    // Delete single task
-    val delId = deletingTaskId
-    if (delId != null) {
-        val task = state.tasks.firstOrNull { it.id == delId }
-        if (task != null) {
-            AlertDialog(
-                onDismissRequest = { deletingTaskId = null },
-                title = { Text("Elimina task") },
-                text = { Text("Eliminare solo il task o anche tutte le sessioni ad esso associate?") },
-                confirmButton = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            onDeleteTask(delId, false)
-                            deletingTaskId = null
-                        }) { Text("Solo task") }
-                        Button(onClick = {
-                            onDeleteTask(delId, true)
-                            deletingTaskId = null
-                        }) { Text("Task + sessioni") }
-                    }
-                },
-                dismissButton = { Button(onClick = { deletingTaskId = null }) { Text("Annulla") } }
-            )
-        } else {
-            deletingTaskId = null
-        }
-    }
+    // Trash (soft-deleted tasks)
+    if (showTrash) {
+        val trashed = state.tasks
+            .filter { it.isDeleted }
+            .sortedByDescending { it.deletedAtMs ?: 0L }
 
-    // Delete selected tasks
-    if (showDeleteSelectedDialog) {
-        val count = selectedTaskIds.size
         AlertDialog(
-            onDismissRequest = { showDeleteSelectedDialog = false },
-            title = { Text("Elimina task") },
-            text = { Text("Eliminare $count task selezionati?\n\nVuoi eliminare solo i task o anche tutte le sessioni ad essi associate?") },
-            confirmButton = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        selectedTaskIds.forEach { onDeleteTask(it, false) }
-                        showDeleteSelectedDialog = false
-                        selectionMode = false
-                        selectedTaskIds = emptySet()
-                    }) { Text("Solo task") }
-                    Button(onClick = {
-                        selectedTaskIds.forEach { onDeleteTask(it, true) }
-                        showDeleteSelectedDialog = false
-                        selectionMode = false
-                        selectedTaskIds = emptySet()
-                    }) { Text("Task + sessioni") }
+            onDismissRequest = { showTrash = false },
+            title = { Text("Cestino (Tasks)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (trashed.isEmpty()) {
+                        Text("Cestino vuoto.")
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.heightIn(max = 420.dp)
+                        ) {
+                            items(trashed, key = { it.id }) { t ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(t.name, style = MaterialTheme.typography.titleMedium)
+                                        Text("id=${t.id}", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Button(onClick = { onRestoreTask(t.id) }) { Text("Ripristina") }
+                                        Button(onClick = { onPurgeTask(t.id) }) { Text("Elimina") }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
-            dismissButton = {
-                Button(onClick = { showDeleteSelectedDialog = false }) { Text("Annulla") }
-            }
+            confirmButton = { Button(onClick = { showTrash = false }) { Text("Chiudi") } }
         )
     }
 
@@ -420,7 +398,7 @@ fun TasksScreen(
         if (task != null) {
             EditTaskDialog(
                 title = "Modifica task",
-                tags = state.tags,
+                tags = visibleTags,
                 initialName = task.name,
                 initialSelection = task.tagIds,
                 initialLink = task.link,

@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -8,6 +8,8 @@ data class Task(
     val name: String,
     val link: String = "",
     val tagIds: Set<Long>,
+    val isDeleted: Boolean = false,
+    val deletedAtMs: Long? = null,
     val isRunning: Boolean,
     val totalMs: Long,
     val lastStartedAtMs: Long? // null se in pausa
@@ -16,6 +18,8 @@ data class Task(
 data class Tag(
     val id: Long,
     val name: String,
+    val isDeleted: Boolean = false,
+    val deletedAtMs: Long? = null,
     val activeChildrenCount: Int,
     val totalMs: Long,
     val lastStartedAtMs: Long? // null se non sta correndo
