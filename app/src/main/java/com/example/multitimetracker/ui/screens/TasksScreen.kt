@@ -1,4 +1,4 @@
-// v16
+// v17
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -255,6 +255,7 @@ fun TasksScreen(
                                 scope.launch { listState.animateScrollToItem(0) }
                             } else {
                                 onToggleTask(task.id)
+                                scope.launch { listState.animateScrollToItem(0) }
                             }
                         },
                         onOpenHistory = { openedTaskId = task.id },
@@ -522,8 +523,11 @@ private fun AddTaskDialog(
                 )
 
                 Text("Tag")
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    tags.forEach { tag ->
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(tags, key = { it.id }) { tag ->
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(tag.name)
                             Checkbox(
@@ -536,7 +540,7 @@ private fun AddTaskDialog(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = newTagName,
                         onValueChange = { newTagName = it },

@@ -1,4 +1,4 @@
-// v17
+// v19
 package com.example.multitimetracker
 
 import android.content.Context
@@ -329,10 +329,9 @@ fun reloadFromSnapshot(context: Context) {
         if (taskSessions.isEmpty() && tagSessions.isEmpty()) {
             Toast.makeText(
                 context,
-                "Nessuna sessione da esportare (avvia e ferma almeno un task)",
+                "Nessuna sessione trovata: esporto comunque task/tag (anagrafica) per non perdere nulla",
                 Toast.LENGTH_LONG
             ).show()
-            return
         }
 
         try {
@@ -442,7 +441,7 @@ fun reloadFromSnapshot(context: Context) {
 
         val already = _state.value.tags.any { it.name.equals(n, ignoreCase = true) }
         if (already) {
-            _ctx?.let { Toast.makeText(it, "tag già esiste", Toast.LENGTH_SHORT).show() }
+            appContext?.let { ctx -> Toast.makeText(ctx, "tag già esiste", Toast.LENGTH_SHORT).show() }
             return
         }
 
