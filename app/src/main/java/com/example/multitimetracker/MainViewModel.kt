@@ -1,8 +1,9 @@
-// v19
+// v20
 package com.example.multitimetracker
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
@@ -24,6 +25,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainViewModel : ViewModel() {
+
+    private companion object {
+        private const val LOG_TAG = "MT_IMPORT"
+    }
 
     private val engine = TimeEngine()
 
@@ -360,8 +365,15 @@ fun reloadFromSnapshot(context: Context) {
      */
     suspend fun importBackupBlocking(context: Context) {
         bindContext(context)
+        Log.i(LOG_TAG, "importBackupBlocking: START (current tasks=${_state.value.tasks.size}, tags=${_state.value.tags.size})")
         val dir = BackupFolderStore.getOrCreateDataDir(context)
+        Log.i(LOG_TAG, "importBackupBlocking: reading from dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
         val snapshot = CsvImporter.importFromBackupFolder(context, dir)
+        Log.i(
+            LOG_TAG,
+            "importBackupBlocking: parsed snapshot tasks=${snapshot.tasks.size} tags=${snapshot.tags.size} " +
+                "taskSessions=${snapshot.taskSessions.size} tagSessions=${snapshot.tagSessions.size} runtime=${snapshot.runtimeSnapshot != null}"
+        )
 
         engine.loadImportedSnapshot(
             tasks = snapshot.tasks,
@@ -370,6 +382,8 @@ fun reloadFromSnapshot(context: Context) {
             importedTagSessions = snapshot.tagSessions,
                     runtimeSnapshot = snapshot.runtimeSnapshot
         )
+
+        Log.i(LOG_TAG, "importBackupBlocking: engine loaded snapshot")
 
         _state.update {
             it.copy(
@@ -380,9 +394,12 @@ fun reloadFromSnapshot(context: Context) {
                 nowMs = System.currentTimeMillis()
             )
         }
+        Log.i(LOG_TAG, "importBackupBlocking: state updated")
         persist()
+        Log.i(LOG_TAG, "importBackupBlocking: persisted")
         lastBackupSignature = computeBackupSignature()
         scheduleAutoBackup()
+        Log.i(LOG_TAG, "importBackupBlocking: END")
     }
 
     fun toggleTask(taskId: Long) {
@@ -566,7 +583,13 @@ fun exportCsv(context: Context) {
     fun importCsv(context: Context, uris: List<Uri>) {
         viewModelScope.launch {
             try {
+                Log.i(LOG_TAG, "importCsv: START uris=${uris.size} (current tasks=${_state.value.tasks.size}, tags=${_state.value.tags.size})")
                 val snapshot = CsvImporter.importFromUris(context, uris)
+                Log.i(
+                    LOG_TAG,
+                    "importCsv: parsed snapshot tasks=${snapshot.tasks.size} tags=${snapshot.tags.size} " +
+                        "taskSessions=${snapshot.taskSessions.size} tagSessions=${snapshot.tagSessions.size} runtime=${snapshot.runtimeSnapshot != null}"
+                )
 
                 // load snapshot into engine so that future exports work
                 engine.loadImportedSnapshot(
@@ -576,6 +599,8 @@ fun exportCsv(context: Context) {
                     importedTagSessions = snapshot.tagSessions,
                     runtimeSnapshot = snapshot.runtimeSnapshot
                 )
+
+                Log.i(LOG_TAG, "importCsv: engine loaded snapshot")
 
                 _state.update {
                     it.copy(
@@ -587,9 +612,13 @@ fun exportCsv(context: Context) {
                     )
                 }
 
+                Log.i(LOG_TAG, "importCsv: state updated")
+
                 // Persist immediately so that reopening the app keeps the imported state.
                 persist()
+                Log.i(LOG_TAG, "importCsv: persisted")
                 scheduleAutoBackup()
+                Log.i(LOG_TAG, "importCsv: END")
 
                 Toast.makeText(
                     context,
@@ -597,6 +626,7 @@ fun exportCsv(context: Context) {
                     Toast.LENGTH_LONG
                 ).show()
             } catch (e: Exception) {
+                Log.e(LOG_TAG, "importCsv: FAILED ${e.message ?: e::class.java.simpleName}", e)
                 Toast.makeText(
                     context,
                     "Import fallito: ${e.message ?: e::class.java.simpleName}",
