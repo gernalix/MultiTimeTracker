@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -246,6 +246,17 @@ class TimeEngine {
 
         val newTasks = stopped.tasks.filterNot { it.id == taskId }
         return EngineResult(newTasks, stopped.tags)
+    }
+
+    /**
+     * Rimuove tutte le sessioni (TaskSession + TagSession) associate a un task.
+     * Utile quando l'utente vuole cancellare il task *e* il suo storico.
+     */
+    fun purgeSessionsForTask(taskId: Long) {
+        taskSessions.removeAll { it.taskId == taskId }
+        tagSessions.removeAll { it.taskId == taskId }
+        activeTaskStart.remove(taskId)
+        activeTagStart.keys.filter { it.taskId == taskId }.forEach { activeTagStart.remove(it) }
     }
 
     fun deleteTag(

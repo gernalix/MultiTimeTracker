@@ -1,15 +1,18 @@
-// v7
+// v8
 package com.example.multitimetracker.ui.components
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -22,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
@@ -35,8 +39,11 @@ fun TaskRow(
     tags: List<Tag>,
     nowMs: Long,
     highlightRunning: Boolean,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
     onToggle: () -> Unit,
-    onOpenHistory: () -> Unit,
     trailing: @Composable () -> Unit
 ) {
     val engine = TimeEngine()
@@ -47,7 +54,12 @@ fun TaskRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpenHistory() },
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongPress() }
+                )
+            },
         colors = if (highlightRunning && task.isRunning) {
             CardDefaults.cardColors(containerColor = runningBg)
         } else {
@@ -66,6 +78,9 @@ fun TaskRow(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (selectionMode) {
+                        Checkbox(checked = selected, onCheckedChange = { onClick() })
+                    }
                     IconButton(onClick = onToggle) {
                         if (task.isRunning) {
                             Icon(Icons.Filled.Pause, contentDescription = "Pause")
@@ -79,8 +94,13 @@ fun TaskRow(
 
             Text(formatDuration(shownMs), style = MaterialTheme.typography.headlineSmall)
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                taskTags.take(4).forEach { tag ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                taskTags.forEach { tag ->
                     val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
                     val bg = base.copy(alpha = 0.35f)
                     AssistChip(
@@ -88,9 +108,6 @@ fun TaskRow(
                         label = { Text(tag.name) },
                         colors = AssistChipDefaults.assistChipColors(containerColor = bg)
                     )
-                }
-                if (taskTags.size > 4) {
-                    AssistChip(onClick = { }, label = { Text("+${taskTags.size - 4}") })
                 }
             }
         }

@@ -1,4 +1,4 @@
-// v17
+// v18
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,7 +80,7 @@ fun TasksScreen(
     onAddTask: (String, Set<Long>, String) -> Unit,
     onAddTag: (String) -> Unit,
     onEditTask: (Long, String, Set<Long>, String) -> Unit,
-    onDeleteTask: (Long) -> Unit,
+    onDeleteTask: (Long, Boolean) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
     onSetBackupRootFolder: (Context, android.net.Uri) -> Unit
@@ -87,6 +88,9 @@ fun TasksScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var deletingTaskId by remember { mutableStateOf<Long?>(null) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedTaskIds by remember { mutableStateOf(setOf<Long>()) }
+    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
     var openedTaskId by remember { mutableStateOf<Long?>(null) }
 
     var query by remember { mutableStateOf("") }
@@ -142,8 +146,33 @@ fun TasksScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Tasks") },
+                title = {
+                    if (selectionMode) {
+                        Text("Selezionati: ${selectedTaskIds.size}")
+                    } else {
+                        Text("Tasks")
+                    }
+                },
                 actions = {
+                    if (selectionMode) {
+                        IconButton(
+                            onClick = {
+                                if (selectedTaskIds.isNotEmpty()) showDeleteSelectedDialog = true
+                            }
+                        ) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
+                        }
+                        TextButton(
+                            onClick = {
+                                selectionMode = false
+                                selectedTaskIds = emptySet()
+                            }
+                        ) {
+                            Text("Fine")
+                        }
+                        return@TopAppBar
+                    }
+
                     IconButton(onClick = {
                         // If backup folder not configured yet, ask once for a root folder.
                         if (BackupFolderStore.getTreeUri(context) == null) {
@@ -169,8 +198,10 @@ fun TasksScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add task")
+            if (!selectionMode) {
+                FloatingActionButton(onClick = { showAdd = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add task")
+                }
             }
         }
     ) { inner ->
@@ -189,7 +220,7 @@ fun TasksScreen(
         ) {
             val activeCount = state.tasks.count { it.isRunning }
             Text(
-                text = "$activeCount task attivi",
+                text = "${state.tasks.size} task totali, $activeCount attivi",
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
@@ -243,12 +274,27 @@ fun TasksScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(orderedTasks, key = { it.id }) { task ->
+                    val isSelected = selectedTaskIds.contains(task.id)
                     TaskRow(
                         tagColors = tagColors,
                         task = task,
                         tags = state.tags,
                         nowMs = state.nowMs,
                         highlightRunning = task.isRunning,
+                        selectionMode = selectionMode,
+                        selected = isSelected,
+                        onClick = {
+                            if (selectionMode) {
+                                selectedTaskIds = if (isSelected) selectedTaskIds - task.id else selectedTaskIds + task.id
+                                if (selectedTaskIds.isEmpty()) selectionMode = false
+                            } else {
+                                openedTaskId = task.id
+                            }
+                        },
+                        onLongPress = {
+                            if (!selectionMode) selectionMode = true
+                            selectedTaskIds = if (isSelected) (selectedTaskIds - task.id) else (selectedTaskIds + task.id)
+                        },
                         onToggle = {
                             if (!task.isRunning) {
                                 onToggleTask(task.id)
@@ -258,7 +304,6 @@ fun TasksScreen(
                                 scope.launch { listState.animateScrollToItem(0) }
                             }
                         },
-                        onOpenHistory = { openedTaskId = task.id },
                         trailing = {
                             if (task.link.isNotBlank()) {
                                 IconButton(onClick = { openLink(context, task.link) }) {
@@ -311,7 +356,7 @@ fun TasksScreen(
         }
     }
 
-    // Delete task
+    // Delete single task
     val delId = deletingTaskId
     if (delId != null) {
         val task = state.tasks.firstOrNull { it.id == delId }
@@ -319,20 +364,53 @@ fun TasksScreen(
             AlertDialog(
                 onDismissRequest = { deletingTaskId = null },
                 title = { Text("Elimina task") },
-                text = { Text("Vuoi eliminare '${task.name}'?") },
+                text = { Text("Eliminare solo il task o anche tutte le sessioni ad esso associate?") },
                 confirmButton = {
-                    Button(onClick = {
-                        onDeleteTask(delId)
-                        deletingTaskId = null
-                    }) { Text("Elimina") }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            onDeleteTask(delId, false)
+                            deletingTaskId = null
+                        }) { Text("Solo task") }
+                        Button(onClick = {
+                            onDeleteTask(delId, true)
+                            deletingTaskId = null
+                        }) { Text("Task + sessioni") }
+                    }
                 },
-                dismissButton = {
-                    Button(onClick = { deletingTaskId = null }) { Text("Annulla") }
-                }
+                dismissButton = { Button(onClick = { deletingTaskId = null }) { Text("Annulla") } }
             )
         } else {
             deletingTaskId = null
         }
+    }
+
+    // Delete selected tasks
+    if (showDeleteSelectedDialog) {
+        val count = selectedTaskIds.size
+        AlertDialog(
+            onDismissRequest = { showDeleteSelectedDialog = false },
+            title = { Text("Elimina task") },
+            text = { Text("Eliminare $count task selezionati?\n\nVuoi eliminare solo i task o anche tutte le sessioni ad essi associate?") },
+            confirmButton = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        selectedTaskIds.forEach { onDeleteTask(it, false) }
+                        showDeleteSelectedDialog = false
+                        selectionMode = false
+                        selectedTaskIds = emptySet()
+                    }) { Text("Solo task") }
+                    Button(onClick = {
+                        selectedTaskIds.forEach { onDeleteTask(it, true) }
+                        showDeleteSelectedDialog = false
+                        selectionMode = false
+                        selectedTaskIds = emptySet()
+                    }) { Text("Task + sessioni") }
+                }
+            },
+            dismissButton = {
+                Button(onClick = { showDeleteSelectedDialog = false }) { Text("Annulla") }
+            }
+        )
     }
 
     // Edit tags

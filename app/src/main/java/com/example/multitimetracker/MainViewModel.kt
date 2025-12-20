@@ -507,7 +507,7 @@ fun reloadFromSnapshot(context: Context) {
 
     
 
-    fun deleteTask(taskId: Long) {
+    fun deleteTask(taskId: Long, deleteSessions: Boolean) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val res = engine.deleteTask(
@@ -516,6 +516,9 @@ fun reloadFromSnapshot(context: Context) {
                 taskId = taskId,
                 nowMs = now
             )
+            if (deleteSessions) {
+                engine.purgeSessionsForTask(taskId)
+            }
             val updated = current.copy(
                 tasks = res.tasks,
                 tags = res.tags,
@@ -527,6 +530,11 @@ fun reloadFromSnapshot(context: Context) {
         }
         persist()
         scheduleAutoBackup()
+    }
+
+    // Backward compatible call sites
+    fun deleteTask(taskId: Long) {
+        deleteTask(taskId, deleteSessions = false)
     }
 
     // Backward compatible call sites
