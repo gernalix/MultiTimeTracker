@@ -1,0 +1,10 @@
+<!-- v1 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="120dp"
+    android:minHeight="48dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_quick_task"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_quick_task_desc"
+    android:label="@string/widget_quick_task_name" />

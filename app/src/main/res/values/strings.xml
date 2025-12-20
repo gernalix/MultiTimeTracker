@@ -1,3 +1,7 @@
+<!-- v2 -->
 <resources>
     <string name="app_name">MultiTimeTracker</string>
+
+    <string name="widget_quick_task_name">Quick task</string>
+    <string name="widget_quick_task_desc">Crea e avvia un task temporaneo con #temp</string>
 </resources>

@@ -1,8 +1,13 @@
-// v4
+// v5
 package com.example.multitimetracker
 
 import android.Manifest
 import android.content.Intent
+import android.content.Context
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.DisposableEffect
+import android.content.IntentFilter
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.ui.AppRoot
 import com.example.multitimetracker.ui.theme.MultiTimeTrackerTheme
+import com.example.multitimetracker.widget.QuickTaskWidgetProvider
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -108,6 +114,29 @@ private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
     LaunchedEffect(setupDone.value) {
         if (setupDone.value) vm.initialize(context)
     }
+
+
+// Listen for snapshot changes emitted by the widget while the app is open.
+val latestVm = rememberUpdatedState(vm)
+DisposableEffect(Unit) {
+    val receiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            if (i.action == QuickTaskWidgetProvider.ACTION_SNAPSHOT_CHANGED) {
+                latestVm.value.reloadFromSnapshot(context)
+            }
+        }
+    }
+    val filter = IntentFilter(QuickTaskWidgetProvider.ACTION_SNAPSHOT_CHANGED)
+    if (Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    } else {
+        @Suppress("DEPRECATION")
+        context.registerReceiver(receiver, filter)
+    }
+    onDispose {
+        runCatching { context.unregisterReceiver(receiver) }
+    }
+}
 
     if (showImportPrompt.value) {
         val probe = pendingProbe.value

@@ -1,4 +1,4 @@
-// v16
+// v17
 package com.example.multitimetracker
 
 import android.content.Context
@@ -112,6 +112,40 @@ class MainViewModel : ViewModel() {
         persist()
         scheduleAutoBackup()
     }
+
+/**
+ * Reloads the persisted snapshot from disk and applies it to the in-memory state.
+ * Used when an external component (e.g. the widget) mutates the snapshot while the app is open.
+ */
+fun reloadFromSnapshot(context: Context) {
+    bindContext(context)
+    val snap = SnapshotStore.load(context) ?: return
+
+    engine.importRuntimeSnapshot(
+        tasks = snap.tasks,
+        tags = snap.tags,
+        taskSessionsSnapshot = snap.taskSessions,
+        tagSessionsSnapshot = snap.tagSessions,
+        snapshot = TimeEngine.RuntimeSnapshot(
+            activeTaskStart = snap.activeTaskStart,
+            activeTagStart = snap.activeTagStart.map { Triple(it.taskId, it.tagId, it.startTs) }
+        )
+    )
+
+    _state.update {
+        it.copy(
+            tasks = snap.tasks,
+            tags = snap.tags,
+            taskSessions = snap.taskSessions,
+            tagSessions = snap.tagSessions,
+            nowMs = System.currentTimeMillis()
+        )
+    }
+
+    // Keep auto-backup scheduled after external changes.
+    scheduleAutoBackup()
+}
+
 
     data class BackupProbeResult(
         val hasValidFullSet: Boolean,
