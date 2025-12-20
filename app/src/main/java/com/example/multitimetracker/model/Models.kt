@@ -1,4 +1,4 @@
-// v5
+// v6
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -20,6 +20,12 @@ data class Tag(
     val name: String,
     val isDeleted: Boolean = false,
     val deletedAtMs: Long? = null,
+    /**
+     * When a tag is deleted with "Solo tag", we remove the tag from its tasks.
+     * This field keeps the list of task IDs that had this tag right before deletion,
+     * so that restoring the tag can re-associate it automatically.
+     */
+    val restoreTaskIds: Set<Long> = emptySet(),
     val activeChildrenCount: Int,
     val totalMs: Long,
     val lastStartedAtMs: Long? // null se non sta correndo

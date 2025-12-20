@@ -1,4 +1,4 @@
-// v12
+// v13
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -273,6 +273,10 @@ class TimeEngine {
 
         val tasksWithTag = curTasks.filter { !it.isDeleted && it.tagIds.contains(tagId) }
 
+        // For the "Solo tag" option, remember which tasks were linked to this tag.
+        // This lets us re-associate automatically if the tag is restored from the trash.
+        val restoreTaskIdsSnapshot = tasksWithTag.map { it.id }.toSet()
+
         if (deleteAssociatedTasks) {
             // Soft delete all tasks that currently have the tag.
             tasksWithTag.forEach { task ->
@@ -302,7 +306,13 @@ class TimeEngine {
 
         // Soft delete the tag itself.
         curTags = curTags.map { tag ->
-            if (tag.id == tagId) tag.copy(isDeleted = true, deletedAtMs = nowMs) else tag
+            if (tag.id == tagId) {
+                if (deleteAssociatedTasks) {
+                    tag.copy(isDeleted = true, deletedAtMs = nowMs, restoreTaskIds = emptySet())
+                } else {
+                    tag.copy(isDeleted = true, deletedAtMs = nowMs, restoreTaskIds = restoreTaskIdsSnapshot)
+                }
+            } else tag
         }
         return EngineResult(curTasks, curTags)
     }
@@ -311,8 +321,41 @@ class TimeEngine {
         return tasks.map { if (it.id == taskId) it.copy(isDeleted = false, deletedAtMs = null) else it }
     }
 
-    fun restoreTag(tags: List<Tag>, tagId: Long): List<Tag> {
-        return tags.map { if (it.id == tagId) it.copy(isDeleted = false, deletedAtMs = null) else it }
+    fun restoreTag(
+        tasks: List<Task>,
+        tags: List<Tag>,
+        tagId: Long,
+        nowMs: Long = System.currentTimeMillis()
+    ): EngineResult {
+        var curTasks = tasks
+        var curTags = tags
+
+        val tag = curTags.firstOrNull { it.id == tagId } ?: return EngineResult(curTasks, curTags)
+        val taskIdsToRestore = tag.restoreTaskIds
+
+        // First restore the tag itself.
+        curTags = curTags.map {
+            if (it.id == tagId) it.copy(isDeleted = false, deletedAtMs = null, restoreTaskIds = emptySet()) else it
+        }
+
+        // Then re-associate it to tasks that had it before deletion ("Solo tag").
+        // Use reassignTaskTags so running task/tag sessions remain coherent.
+        taskIdsToRestore.forEach { taskId ->
+            val t = curTasks.firstOrNull { it.id == taskId }
+            if (t != null && !t.isDeleted) {
+                val res = reassignTaskTags(
+                    tasks = curTasks,
+                    tags = curTags,
+                    taskId = taskId,
+                    newTagIds = t.tagIds + tagId,
+                    nowMs = nowMs
+                )
+                curTasks = res.tasks
+                curTags = res.tags
+            }
+        }
+
+        return EngineResult(curTasks, curTags)
     }
 
     fun purgeTask(

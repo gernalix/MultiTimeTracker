@@ -1,4 +1,4 @@
-// v4
+// v5
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -52,7 +52,10 @@ object SnapshotStore {
                     JSONObject()
                         .put("id", t.id)
                         .put("name", t.name)
+.put("link", t.link)
 .put("tagIds", JSONArray().apply { t.tagIds.forEach { put(it) } })
+                        .put("isDeleted", t.isDeleted)
+                        .put("deletedAtMs", t.deletedAtMs)
                         .put("isRunning", t.isRunning)
                         .put("totalMs", t.totalMs)
                         .put("lastStartedAtMs", t.lastStartedAtMs)
@@ -66,6 +69,9 @@ object SnapshotStore {
                     JSONObject()
                         .put("id", tg.id)
                         .put("name", tg.name)
+                        .put("isDeleted", tg.isDeleted)
+                        .put("deletedAtMs", tg.deletedAtMs)
+                        .put("restoreTaskIds", JSONArray().apply { tg.restoreTaskIds.forEach { put(it) } })
                         .put("activeChildrenCount", tg.activeChildrenCount)
                         .put("totalMs", tg.totalMs)
                         .put("lastStartedAtMs", tg.lastStartedAtMs)
@@ -180,6 +186,8 @@ object SnapshotStore {
                     name = o.getString("name"),
                     link = if (o.has("link") && !o.isNull("link")) o.getString("link") else "",
                     tagIds = tagIds,
+                    isDeleted = o.optBoolean("isDeleted", false),
+                    deletedAtMs = if (o.has("deletedAtMs") && !o.isNull("deletedAtMs")) o.getLong("deletedAtMs") else null,
                     isRunning = o.getBoolean("isRunning"),
                     totalMs = o.getLong("totalMs"),
                     lastStartedAtMs = if (o.isNull("lastStartedAtMs")) null else o.getLong("lastStartedAtMs")
@@ -193,10 +201,21 @@ object SnapshotStore {
         val out = ArrayList<Tag>(length())
         for (i in 0 until length()) {
             val o = getJSONObject(i)
+
+            val restoreArr = o.optJSONArray("restoreTaskIds")
+            val restoreTaskIds = buildSet<Long> {
+                if (restoreArr != null) {
+                    for (j in 0 until restoreArr.length()) add(restoreArr.getLong(j))
+                }
+            }
+
             out.add(
                 Tag(
                     id = o.getLong("id"),
                     name = o.getString("name"),
+                    isDeleted = o.optBoolean("isDeleted", false),
+                    deletedAtMs = if (o.has("deletedAtMs") && !o.isNull("deletedAtMs")) o.getLong("deletedAtMs") else null,
+                    restoreTaskIds = restoreTaskIds,
                     activeChildrenCount = o.getInt("activeChildrenCount"),
                     totalMs = o.getLong("totalMs"),
                     lastStartedAtMs = if (o.isNull("lastStartedAtMs")) null else o.getLong("lastStartedAtMs")

@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -39,6 +39,7 @@ import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TagRow
+import com.example.multitimetracker.ui.components.GroupBorder
 
 private data class Interval(val start: Long, val end: Long)
 
@@ -109,11 +110,36 @@ fun TagsScreen(
             }
         }
     ) { inner ->
-        val orderedTags = remember(visibleTags, visibleTasks) {
-            visibleTags.sortedWith(
-                compareByDescending<Tag> { tag ->
-                    visibleTasks.any { it.isRunning && it.tagIds.contains(tag.id) }
-                }.thenBy { it.name.lowercase() }
+        // We want "related" (parent) active tags to stay contiguous so we can draw a thick
+        // rectangle-like border around them. Two tags are related if at least one *running* task
+        // feeds both of them.
+        data class TagMeta(
+            val tag: Tag,
+            val runningCount: Int,
+            val groupKeyTaskId: Long? // running task id used as grouping key (smallest running task feeding this tag)
+        )
+
+        val tagMeta = remember(visibleTags, visibleTasks) {
+            visibleTags.map { tag ->
+                val feeding = visibleTasks.filter { it.tagIds.contains(tag.id) }
+                val runningFeeding = feeding.filter { it.isRunning }
+                val key = runningFeeding.minOfOrNull { it.id }
+                TagMeta(tag = tag, runningCount = runningFeeding.size, groupKeyTaskId = key)
+            }
+        }
+
+        val groupSizes = remember(tagMeta) {
+            tagMeta
+                .mapNotNull { it.groupKeyTaskId }
+                .groupingBy { it }
+                .eachCount()
+        }
+
+        val orderedTagMeta = remember(tagMeta, groupSizes) {
+            tagMeta.sortedWith(
+                compareByDescending<TagMeta> { it.runningCount > 0 }
+                    .thenBy { it.groupKeyTaskId ?: Long.MAX_VALUE }
+                    .thenBy { it.tag.name.lowercase() }
             )
         }
 
@@ -123,7 +149,8 @@ fun TagsScreen(
                 .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(orderedTags, key = { it.id }) { tag ->
+            items(orderedTagMeta, key = { it.tag.id }) { meta ->
+                val tag = meta.tag
                 // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
                 // (le sovrapposizioni contano una sola volta)
                 val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
@@ -154,6 +181,19 @@ fun TagsScreen(
                     .intersect(visibleTags.map { it.id }.toSet())
                 val sharedCount = sharedTagIds.size
 
+                // Group border for tags fed by the same running task (visible adjacency is guaranteed by ordering).
+                val gk = meta.groupKeyTaskId
+                val groupEnabled = gk != null && (groupSizes[gk] ?: 0) >= 2
+
+                // Neighbor-based first/last detection (inside LazyColumn we can't easily access index;
+                // we approximate by looking at the already-ordered list via remember() below).
+                val orderedIds = remember(orderedTagMeta) { orderedTagMeta.map { it.tag.id } }
+                val idx = orderedIds.indexOf(tag.id)
+                val prevGk = if (idx > 0) orderedTagMeta[idx - 1].groupKeyTaskId else null
+                val nextGk = if (idx >= 0 && idx < orderedTagMeta.size - 1) orderedTagMeta[idx + 1].groupKeyTaskId else null
+                val isFirst = groupEnabled && prevGk != gk
+                val isLast = groupEnabled && nextGk != gk
+
                 TagRow(
                     color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
                     tag = tag,
@@ -161,6 +201,7 @@ fun TagsScreen(
                     runningText = runningText,
                     highlightRunning = runningCount > 0,
                     sharedCount = sharedCount,
+                    groupBorder = GroupBorder(enabled = groupEnabled, isFirst = isFirst, isLast = isLast),
                     onOpen = { openedTagId = tag.id },
                     onEdit = { editingTagId = tag.id },
                     onDelete = { deletingTagId = tag.id }

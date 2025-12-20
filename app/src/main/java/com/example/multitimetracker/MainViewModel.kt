@@ -569,7 +569,20 @@ fun reloadFromSnapshot(context: Context) {
 
     fun restoreTag(tagId: Long) {
         _state.update { current ->
-            current.copy(tags = engine.restoreTag(current.tags, tagId), nowMs = System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            val res = engine.restoreTag(
+                tasks = current.tasks,
+                tags = current.tags,
+                tagId = tagId,
+                nowMs = now
+            )
+            current.copy(
+                tasks = res.tasks,
+                tags = res.tags,
+                taskSessions = engine.getTaskSessions(),
+                tagSessions = engine.getTagSessions(),
+                nowMs = now
+            )
         }
         persist()
         scheduleAutoBackup()
