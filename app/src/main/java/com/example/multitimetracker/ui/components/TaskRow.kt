@@ -1,4 +1,4 @@
-// v8
+// v9
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -9,16 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
@@ -39,12 +33,10 @@ fun TaskRow(
     tags: List<Tag>,
     nowMs: Long,
     highlightRunning: Boolean,
-    selectionMode: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit,
     onToggle: () -> Unit,
-    trailing: @Composable () -> Unit
+    onLongPress: () -> Unit,
+    linkText: String,
+    onOpenLink: () -> Unit
 ) {
     val engine = TimeEngine()
     val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
@@ -56,11 +48,11 @@ fun TaskRow(
             .fillMaxWidth()
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { onClick() },
+                    onTap = { onToggle() },
                     onLongPress = { onLongPress() }
                 )
             },
-        colors = if (highlightRunning && task.isRunning) {
+        colors = if (highlightRunning) {
             CardDefaults.cardColors(containerColor = runningBg)
         } else {
             CardDefaults.cardColors()
@@ -76,20 +68,6 @@ fun TaskRow(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (selectionMode) {
-                        Checkbox(checked = selected, onCheckedChange = { onClick() })
-                    }
-                    IconButton(onClick = onToggle) {
-                        if (task.isRunning) {
-                            Icon(Icons.Filled.Pause, contentDescription = "Pause")
-                        } else {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
-                        }
-                    }
-                    trailing()
-                }
             }
 
             Text(formatDuration(shownMs), style = MaterialTheme.typography.headlineSmall)
@@ -100,6 +78,15 @@ fun TaskRow(
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
             ) {
+                if (linkText.isNotBlank()) {
+                    AssistChip(
+                        onClick = onOpenLink,
+                        label = { Text(linkText) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    )
+                }
                 taskTags.forEach { tag ->
                     val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
                     val bg = base.copy(alpha = 0.35f)

@@ -1,4 +1,4 @@
-// v8
+// v9
 package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
@@ -21,13 +21,22 @@ import com.example.multitimetracker.ui.screens.TasksScreen
 private enum class Tab { TASKS, TAGS }
 
 @Composable
-fun AppRoot(vm: MainViewModel) {
+fun AppRoot(
+    vm: MainViewModel,
+    focusTaskId: Long? = null,
+    onFocusConsumed: () -> Unit = {}
+) {
     val state by vm.state.collectAsState()
-    varTabScaffold(state = state, vm = vm)
+    varTabScaffold(state = state, vm = vm, focusTaskId = focusTaskId, onFocusConsumed = onFocusConsumed)
 }
 
 @Composable
-private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm: MainViewModel) {
+private fun varTabScaffold(
+    state: com.example.multitimetracker.model.UiState,
+    vm: MainViewModel,
+    focusTaskId: Long?,
+    onFocusConsumed: () -> Unit
+) {
     androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Tab.TASKS) }.let { tabState ->
         val tab = tabState.value
 
@@ -62,7 +71,9 @@ private fun varTabScaffold(state: com.example.multitimetracker.model.UiState, vm
                     onPurgeTask = vm::purgeTask,
                     onExport = vm::exportBackup,
                     onImport = vm::importBackup,
-                    onSetBackupRootFolder = vm::setBackupRootFolder
+                    onSetBackupRootFolder = vm::setBackupRootFolder,
+                    externalFocusTaskId = focusTaskId,
+                    onExternalFocusConsumed = onFocusConsumed
                 )
 
                 Tab.TAGS -> TagsScreen(

@@ -1,4 +1,4 @@
-// v1
+// v2
 package com.example.multitimetracker.widget
 
 import android.app.Activity
@@ -10,6 +10,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
+import com.example.multitimetracker.MainActivity
 
 /**
  * A tiny transparent Activity used as a reliable place to trigger haptics and toast.
@@ -18,9 +19,6 @@ import android.widget.Toast
 class QuickTaskWidgetClickActivity : Activity() {
 
     companion object {
-        private const val ACTION_QUICK_TASK_CLICK = "com.example.multitimetracker.widget.ACTION_QUICK_TASK_CLICK"
-        private const val EXTRA_FROM_ACTIVITY = "com.example.multitimetracker.widget.EXTRA_FROM_ACTIVITY"
-
         private fun vibrateStrong(context: Context) {
             runCatching {
                 val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -52,12 +50,19 @@ class QuickTaskWidgetClickActivity : Activity() {
         vibrateStrong(appCtx)
         Toast.makeText(appCtx, "Quick task avviato", Toast.LENGTH_SHORT).show()
 
-        // Then delegate the actual work to the existing widget provider logic.
-        val intent = Intent(appCtx, QuickTaskWidgetProvider::class.java).apply {
-            action = ACTION_QUICK_TASK_CLICK
-            putExtra(EXTRA_FROM_ACTIVITY, true)
+        // Run quick task creation/start and get the new task ID.
+        val createdTaskId = runCatching { QuickTaskRunner.run(appCtx) }.getOrNull()
+
+        // Open the app focused on the created task.
+        if (createdTaskId != null) {
+            startActivity(
+                Intent(appCtx, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    putExtra(MainActivity.EXTRA_FOCUS_TASK_ID, createdTaskId)
+                }
+            )
         }
-        appCtx.sendBroadcast(intent)
 
         // Close immediately (no UI).
         finish()

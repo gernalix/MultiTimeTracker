@@ -1,4 +1,4 @@
-// v19
+// v21
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -7,8 +7,17 @@ import android.net.Uri
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,9 +33,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -38,12 +47,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,6 +82,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,15 +98,22 @@ fun TasksScreen(
     onPurgeTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
-    onSetBackupRootFolder: (Context, android.net.Uri) -> Unit
+    onSetBackupRootFolder: (Context, android.net.Uri) -> Unit,
+    externalFocusTaskId: Long? = null,
+    onExternalFocusConsumed: () -> Unit = {}
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTrash by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var openedTaskId by remember { mutableStateOf<Long?>(null) }
 
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedTaskIds by remember { mutableStateOf(setOf<Long>()) }
+    // Smooth removal animation for swipe-to-trash.
+    var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
+
+    // Used to animate the item just created.
+    var highlightTaskId by remember { mutableStateOf<Long?>(null) }
+    var lastSeenMaxTaskId by remember { mutableStateOf(0L) }
 
     var query by remember { mutableStateOf("") }
     var selectedTagFilters by remember { mutableStateOf(setOf<Long>()) }
@@ -146,25 +167,47 @@ fun TasksScreen(
         )
     }
 
+    // Focus request coming from outside (e.g. widget).
+    LaunchedEffect(externalFocusTaskId) {
+        val id = externalFocusTaskId
+        if (id != null) {
+            highlightTaskId = id
+            runCatching { listState.animateScrollToItem(0) }
+            delay(1200)
+            if (highlightTaskId == id) highlightTaskId = null
+            onExternalFocusConsumed()
+        }
+    }
+
+    // When a new task is created, scroll to top and briefly highlight it.
+    LaunchedEffect(state.tasks) {
+        val maxId = state.tasks
+            .asSequence()
+            .filter { !it.isDeleted }
+            .maxOfOrNull { it.id } ?: 0L
+
+        if (maxId > lastSeenMaxTaskId) {
+            lastSeenMaxTaskId = maxId
+            highlightTaskId = maxId
+            runCatching { listState.animateScrollToItem(0) }
+            delay(1200)
+            if (highlightTaskId == maxId) highlightTaskId = null
+        } else if (lastSeenMaxTaskId == 0L) {
+            lastSeenMaxTaskId = maxId
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = { Text("Tasks") },
                 actions = {
-                    if (selectionMode) {
-                        IconButton(onClick = {
-                            // Delete selected immediately (send to trash)
-                            selectedTaskIds.forEach { onDeleteTask(it) }
-                            selectedTaskIds = emptySet()
-                            selectionMode = false
-                        }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete selected")
-                        }
-                    } else {
-                        IconButton(onClick = { showTrash = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Trash")
-                        }
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                    }
+                    IconButton(onClick = { showTrash = true }) {
+                        Icon(Icons.Filled.Delete, contentDescription = "Trash")
                     }
                     IconButton(onClick = {
                         // If backup folder not configured yet, ask once for a root folder.
@@ -265,52 +308,94 @@ fun TasksScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(orderedTasks, key = { it.id }) { task ->
-                    val isSelected = selectedTaskIds.contains(task.id)
-                    TaskRow(
-                        tagColors = tagColors,
-                        task = task,
-                        tags = visibleTags,
-                        nowMs = state.nowMs,
-                        highlightRunning = task.isRunning,
-                        selectionMode = selectionMode,
-                        selected = isSelected,
-                        onClick = {
-                            if (selectionMode) {
-                                selectedTaskIds = if (isSelected) selectedTaskIds - task.id else selectedTaskIds + task.id
-                                if (selectedTaskIds.isEmpty()) selectionMode = false
-                            } else {
-                                openedTaskId = task.id
-                            }
-                        },
-                        onLongPress = {
-                            if (!selectionMode) selectionMode = true
-                            selectedTaskIds = if (isSelected) selectedTaskIds - task.id else selectedTaskIds + task.id
-                        },
-                        onToggle = {
-                            onToggleTask(task.id)
-                            scope.launch { listState.animateScrollToItem(0) }
-                        },
-                        trailing = {
-                            if (task.link.isNotBlank()) {
-                                IconButton(onClick = { openLink(context, task.link) }) {
-                                    Text("🔗")
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            when (value) {
+                                SwipeToDismissBoxValue.StartToEnd -> {
+                                    // Swipe right -> edit
+                                    editingTaskId = task.id
                                 }
-                            }
-                            IconButton(onClick = { editingTaskId = task.id }) {
-                                Icon(Icons.Filled.Edit, contentDescription = "Edit tags")
-                            }
-                            IconButton(onClick = {
-                                onDeleteTask(task.id)
-                                // If the user was selecting, keep the selection state coherent.
-                                if (selectionMode) {
-                                    selectedTaskIds = selectedTaskIds - task.id
-                                    if (selectedTaskIds.isEmpty()) selectionMode = false
+                                SwipeToDismissBoxValue.EndToStart -> {
+                                    // Swipe left -> trash
+                                    // Smooth removal before moving to trash.
+                                    val id = task.id
+                                    if (!removingTaskIds.contains(id)) {
+                                        removingTaskIds = removingTaskIds + id
+                                        scope.launch {
+                                            delay(800)
+                                            onDeleteTask(id)
+                                            removingTaskIds = removingTaskIds - id
+                                        }
+                                    }
                                 }
-                            }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Delete task")
+                                else -> Unit
                             }
+                            // Keep the item in-place; state changes will drive recomposition.
+                            false
                         }
                     )
+
+                    AnimatedVisibility(
+                        visible = !removingTaskIds.contains(task.id),
+                        enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+                        exit = shrinkVertically(animationSpec = tween(800, easing = FastOutSlowInEasing)) +
+                            fadeOut(animationSpec = tween(800, easing = FastOutSlowInEasing))
+                    ) {
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                            val bgColor = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
+                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
+                                else -> Color.Transparent
+                            }
+                            val label = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
+                                SwipeToDismissBoxValue.EndToStart -> "TRASH"
+                                else -> ""
+                            }
+                            val alignment = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 64.dp)
+                                    .background(bgColor),
+                                contentAlignment = alignment
+                            ) {
+                                if (label.isNotBlank()) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(horizontal = 14.dp)
+                                    )
+                                }
+                            }
+                            },
+                            content = {
+                            // Highlight the most recently created task.
+                            val highlightThis = highlightTaskId == task.id
+                            TaskRow(
+                                tagColors = tagColors,
+                                task = task,
+                                tags = visibleTags,
+                                nowMs = state.nowMs,
+                                highlightRunning = highlightThis || task.isRunning,
+                                onToggle = {
+                                    onToggleTask(task.id)
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                },
+                                onLongPress = { openedTaskId = task.id },
+                                linkText = if (task.link.isNotBlank()) "🔗" else "",
+                                onOpenLink = { openLink(context, task.link) }
+                            )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -347,6 +432,35 @@ fun TasksScreen(
         } else {
             openedTaskId = null
         }
+    }
+
+    // Settings (minimal stats).
+    if (showSettings) {
+        val totalFromSessions = state.taskSessions.sumOf { s -> (s.endTs - s.startTs).coerceAtLeast(0L) }
+        val runningExtra = state.tasks
+            .asSequence()
+            .filter { it.isRunning && it.lastStartedAtMs != null }
+            .sumOf { t -> (state.nowMs - (t.lastStartedAtMs ?: state.nowMs)).coerceAtLeast(0L) }
+        val totalTracked = totalFromSessions + runningExtra
+
+        val tasksTotal = state.tasks.count { !it.isDeleted }
+        val tagsTotal = state.tags.count { !it.isDeleted }
+
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            title = { Text("Impostazioni") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text("Statistiche", style = MaterialTheme.typography.titleMedium)
+                    Text("Tempo totale tracciato: ${formatDuration(totalTracked)}")
+                    Text("Task totali: $tasksTotal")
+                    Text("Tag totali: $tagsTotal")
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showSettings = false }) { Text("Chiudi") }
+            }
+        )
     }
 
     // Trash (soft-deleted tasks)

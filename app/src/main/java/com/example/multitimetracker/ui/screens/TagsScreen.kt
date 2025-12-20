@@ -1,10 +1,19 @@
-// v12
+// v14
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,22 +33,29 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TagRow
-import com.example.multitimetracker.ui.components.GroupBorder
 
 private data class Interval(val start: Long, val end: Long)
 
@@ -85,6 +101,11 @@ fun TagsScreen(
     var showAdd by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
+    // Smooth removal animation for swipe-to-trash.
+    var removingTagIds by remember { mutableStateOf(setOf<Long>()) }
+
+    val scope = rememberCoroutineScope()
+
     val engine = remember { TimeEngine() }
 
     val visibleTags = remember(state.tags) { state.tags.filter { !it.isDeleted } }
@@ -110,35 +131,21 @@ fun TagsScreen(
             }
         }
     ) { inner ->
-        // We want "related" (parent) active tags to stay contiguous so we can draw a thick
-        // rectangle-like border around them. Two tags are related if at least one *running* task
-        // feeds both of them.
         data class TagMeta(
             val tag: Tag,
-            val runningCount: Int,
-            val groupKeyTaskId: Long? // running task id used as grouping key (smallest running task feeding this tag)
+            val runningCount: Int
         )
 
         val tagMeta = remember(visibleTags, visibleTasks) {
             visibleTags.map { tag ->
                 val feeding = visibleTasks.filter { it.tagIds.contains(tag.id) }
-                val runningFeeding = feeding.filter { it.isRunning }
-                val key = runningFeeding.minOfOrNull { it.id }
-                TagMeta(tag = tag, runningCount = runningFeeding.size, groupKeyTaskId = key)
+                TagMeta(tag = tag, runningCount = feeding.count { it.isRunning })
             }
         }
 
-        val groupSizes = remember(tagMeta) {
-            tagMeta
-                .mapNotNull { it.groupKeyTaskId }
-                .groupingBy { it }
-                .eachCount()
-        }
-
-        val orderedTagMeta = remember(tagMeta, groupSizes) {
+        val orderedTagMeta = remember(tagMeta) {
             tagMeta.sortedWith(
                 compareByDescending<TagMeta> { it.runningCount > 0 }
-                    .thenBy { it.groupKeyTaskId ?: Long.MAX_VALUE }
                     .thenBy { it.tag.name.lowercase() }
             )
         }
@@ -181,31 +188,78 @@ fun TagsScreen(
                     .intersect(visibleTags.map { it.id }.toSet())
                 val sharedCount = sharedTagIds.size
 
-                // Group border for tags fed by the same running task (visible adjacency is guaranteed by ordering).
-                val gk = meta.groupKeyTaskId
-                val groupEnabled = gk != null && (groupSizes[gk] ?: 0) >= 2
-
-                // Neighbor-based first/last detection (inside LazyColumn we can't easily access index;
-                // we approximate by looking at the already-ordered list via remember() below).
-                val orderedIds = remember(orderedTagMeta) { orderedTagMeta.map { it.tag.id } }
-                val idx = orderedIds.indexOf(tag.id)
-                val prevGk = if (idx > 0) orderedTagMeta[idx - 1].groupKeyTaskId else null
-                val nextGk = if (idx >= 0 && idx < orderedTagMeta.size - 1) orderedTagMeta[idx + 1].groupKeyTaskId else null
-                val isFirst = groupEnabled && prevGk != gk
-                val isLast = groupEnabled && nextGk != gk
-
-                TagRow(
-                    color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
-                    tag = tag,
-                    shownMs = shownMs,
-                    runningText = runningText,
-                    highlightRunning = runningCount > 0,
-                    sharedCount = sharedCount,
-                    groupBorder = GroupBorder(enabled = groupEnabled, isFirst = isFirst, isLast = isLast),
-                    onOpen = { openedTagId = tag.id },
-                    onEdit = { editingTagId = tag.id },
-                    onDelete = { deletingTagId = tag.id }
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { value ->
+                        when (value) {
+                            SwipeToDismissBoxValue.StartToEnd -> {
+                                // Swipe right -> edit
+                                editingTagId = tag.id
+                            }
+                            SwipeToDismissBoxValue.EndToStart -> {
+                                // Swipe left -> trash (with semantics prompt)
+                                deletingTagId = tag.id
+                            }
+                            else -> Unit
+                        }
+                        // Keep the item in-place; state changes will drive recomposition.
+                        false
+                    }
                 )
+
+                AnimatedVisibility(
+                    visible = !removingTagIds.contains(tag.id),
+                    enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                        fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+                    exit = shrinkVertically(animationSpec = tween(800, easing = FastOutSlowInEasing)) +
+                        fadeOut(animationSpec = tween(800, easing = FastOutSlowInEasing))
+                ) {
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                        val bgColor = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
+                            SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
+                            else -> Color.Transparent
+                        }
+                        val label = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
+                            SwipeToDismissBoxValue.EndToStart -> "TRASH"
+                            else -> ""
+                        }
+                        val alignment = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                            SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                            else -> Alignment.Center
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 64.dp)
+                                .background(bgColor),
+                            contentAlignment = alignment
+                        ) {
+                            if (label.isNotBlank()) {
+                                Text(
+                                    text = label,
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
+                            }
+                        }
+                        },
+                        content = {
+                        TagRow(
+                            color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
+                            tag = tag,
+                            shownMs = shownMs,
+                            runningText = runningText,
+                            highlightRunning = runningCount > 0,
+                            sharedCount = sharedCount,
+                            onOpen = { openedTagId = tag.id }
+                        )
+                        }
+                    )
+                }
             }
         }
     }
@@ -352,11 +406,25 @@ fun TagsScreen(
                 confirmButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
-                            onDeleteTag(delId, false)
+                            if (!removingTagIds.contains(delId)) {
+                                removingTagIds = removingTagIds + delId
+                                scope.launch {
+                                    delay(800)
+                                    onDeleteTag(delId, false)
+                                    removingTagIds = removingTagIds - delId
+                                }
+                            }
                             deletingTagId = null
                         }) { Text("Solo tag") }
                         Button(onClick = {
-                            onDeleteTag(delId, true)
+                            if (!removingTagIds.contains(delId)) {
+                                removingTagIds = removingTagIds + delId
+                                scope.launch {
+                                    delay(800)
+                                    onDeleteTag(delId, true)
+                                    removingTagIds = removingTagIds - delId
+                                }
+                            }
                             deletingTagId = null
                         }) { Text("Tag + task") }
                     }

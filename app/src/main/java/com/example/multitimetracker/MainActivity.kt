@@ -1,4 +1,4 @@
-// v5
+// v6
 package com.example.multitimetracker
 
 import android.Manifest
@@ -37,19 +37,39 @@ import com.example.multitimetracker.widget.QuickTaskWidgetProvider
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_FOCUS_TASK_ID = "com.example.multitimetracker.EXTRA_FOCUS_TASK_ID"
+    }
+
+    private val focusTaskIdState = androidx.compose.runtime.mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        focusTaskIdState.value = intent?.getLongExtra(EXTRA_FOCUS_TASK_ID, -1L)
+            ?.takeIf { it >= 0L }
+
         setContent {
             MultiTimeTrackerTheme {
-                MultiTimeTrackerApp()
+                MultiTimeTrackerApp(focusTaskIdState)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val id = intent.getLongExtra(EXTRA_FOCUS_TASK_ID, -1L)
+        if (id >= 0L) focusTaskIdState.value = id
     }
 }
 
 @Composable
-private fun MultiTimeTrackerApp(vm: MainViewModel = viewModel()) {
+private fun MultiTimeTrackerApp(
+    focusTaskIdState: androidx.compose.runtime.MutableState<Long?>,
+    vm: MainViewModel = viewModel()
+) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
 
@@ -199,5 +219,9 @@ DisposableEffect(Unit) {
         }
     }
 
-    AppRoot(vm = vm)
+    AppRoot(
+        vm = vm,
+        focusTaskId = focusTaskIdState.value,
+        onFocusConsumed = { focusTaskIdState.value = null }
+    )
 }
