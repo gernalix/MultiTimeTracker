@@ -1,4 +1,4 @@
-// v10
+// v11
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -155,10 +155,12 @@ object CsvImporter {
         val tasksById: LinkedHashMap<Long, Task> = linkedMapOf()
 
         baseTags?.forEach { t ->
-            tagsById[t.id] = t.copy(activeChildrenCount = 0, totalMs = 0L, lastStartedAtMs = null)
+            // Keep totals + lastStartedAtMs from dict.json; just reset UI-only fields.
+            tagsById[t.id] = t.copy(activeChildrenCount = 0)
         }
         baseTasks?.forEach { t ->
-            tasksById[t.id] = t.copy(isRunning = false, totalMs = 0L, lastStartedAtMs = null)
+            // Keep isRunning/totalMs/lastStartedAtMs from dict.json (authoritative).
+            tasksById[t.id] = t
         }
 
         i("buildSnapshot: after dict.json -> tasks=${tasksById.size} tags=${tagsById.size}")
