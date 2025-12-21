@@ -1,4 +1,4 @@
-// v27
+// v29
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.size
@@ -12,7 +12,6 @@ import android.net.Uri
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutHorizontally
@@ -67,6 +66,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -131,7 +131,7 @@ fun TasksScreen(
 
     // Used to animate the item just created.
     var highlightTaskId by remember { mutableStateOf<Long?>(null) }
-    var lastSeenMaxTaskId by remember { mutableStateOf(0L) }
+    var lastSeenMaxTaskId by rememberSaveable { mutableStateOf(-1L) }
 
     var query by remember { mutableStateOf("") }
     var selectedTagFilters by remember { mutableStateOf(setOf<Long>()) }
@@ -193,7 +193,7 @@ fun TasksScreen(
         if (id != null) {
             highlightTaskId = id
             runCatching { listState.animateScrollToItem(0) }
-            delay(1200)
+            delay(2000)
             if (highlightTaskId == id) highlightTaskId = null
             onExternalFocusConsumed()
         }
@@ -206,11 +206,17 @@ fun TasksScreen(
             .filter { !it.isDeleted }
             .maxOfOrNull { it.id } ?: 0L
 
+        // First composition of this screen: initialize baseline without highlighting.
+        if (lastSeenMaxTaskId < 0L) {
+            lastSeenMaxTaskId = maxId
+            return@LaunchedEffect
+        }
+
         if (maxId > lastSeenMaxTaskId) {
             lastSeenMaxTaskId = maxId
             highlightTaskId = maxId
             runCatching { listState.animateScrollToItem(0) }
-            delay(1200)
+            delay(2000)
             if (highlightTaskId == maxId) highlightTaskId = null
         } else if (lastSeenMaxTaskId == 0L) {
             lastSeenMaxTaskId = maxId
@@ -358,7 +364,7 @@ fun TasksScreen(
                         }
                     )
 
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = !removingTaskIds.contains(task.id),
                         enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
                             fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
@@ -370,36 +376,36 @@ fun TasksScreen(
                         SwipeToDismissBox(
                             state = dismissState,
                             backgroundContent = {
-                            val bgColor = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
-                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
-                                else -> Color.Transparent
-                            }
-                            val label = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
-                                SwipeToDismissBoxValue.EndToStart -> "TRASH"
-                                else -> ""
-                            }
-                            val alignment = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                                else -> Alignment.Center
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 64.dp)
-                                    .background(bgColor),
-                                contentAlignment = alignment
-                            ) {
-                                if (label.isNotBlank()) {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(horizontal = 14.dp)
-                                    )
+                                val bgColor = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
+                                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
+                                    else -> Color.Transparent
                                 }
-                            }
+                                val label = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> "Edit"
+                                    SwipeToDismissBoxValue.EndToStart -> "Delete"
+                                    else -> ""
+                                }
+                                val alignment = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                    else -> Alignment.Center
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(bgColor),
+                                    contentAlignment = alignment
+                                ) {
+                                    if (label.isNotBlank()) {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(horizontal = 14.dp)
+                                        )
+                                    }
+                                }
                             },
                             content = {
                             // Highlight the most recently created task.
@@ -409,7 +415,8 @@ fun TasksScreen(
                                 task = task,
                                 tags = visibleTags,
                                 nowMs = state.nowMs,
-                                highlightRunning = highlightThis || task.isRunning,
+                                highlightRunning = task.isRunning,
+                                highlightJustCreated = highlightThis,
                                 onToggle = {
                                     onToggleTask(task.id)
                                     scope.launch { listState.animateScrollToItem(0) }

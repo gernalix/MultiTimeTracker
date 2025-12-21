@@ -1,4 +1,4 @@
-// v11
+// v16
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,6 +50,7 @@ fun TaskRow(
     tags: List<Tag>,
     nowMs: Long,
     highlightRunning: Boolean,
+    highlightJustCreated: Boolean = false,
     onToggle: () -> Unit,
     onLongPress: () -> Unit,
     linkText: String,
@@ -85,43 +87,40 @@ fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // LEFT: title + small status/link line (2 lines total)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(end = 78.dp) // reserve space for the right column to avoid weight()
+            Column(
+                modifier = Modifier.fillMaxWidth(0.68f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = task.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val statusText = if (task.isRunning) "Running" else "Paused"
                     Text(
-                        text = task.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.EllIPSIS
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val statusText = if (task.isRunning) "Running" else "Paused"
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.EllIPSIS
-                        )
-
-                        if (linkText.isNotBlank()) {
-                            IconButton(
-                                onClick = onOpenLink,
-                                modifier = Modifier.size(26.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.KeyboardArrowRight,
-                                    contentDescription = "Open link",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                    if (linkText.isNotBlank()) {
+                        IconButton(
+                            onClick = onOpenLink,
+                            modifier = Modifier.size(26.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowRight,
+                                contentDescription = "Open link",
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
@@ -234,7 +233,7 @@ private fun CompactTagChip(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
-            overflow = TextOverflow.EllIPSIS
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

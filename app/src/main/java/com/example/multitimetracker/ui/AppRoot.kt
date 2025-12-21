@@ -1,4 +1,4 @@
-// v9
+// v10
 package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import com.example.multitimetracker.MainViewModel
 import com.example.multitimetracker.ui.screens.TagsScreen
@@ -39,6 +40,7 @@ private fun varTabScaffold(
 ) {
     androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Tab.TASKS) }.let { tabState ->
         val tab = tabState.value
+        val stateHolder = rememberSaveableStateHolder()
 
         Scaffold(
             bottomBar = {
@@ -59,7 +61,7 @@ private fun varTabScaffold(
             }
         ) { inner ->
             when (tab) {
-                Tab.TASKS -> TasksScreen(
+                Tab.TASKS -> stateHolder.SaveableStateProvider("tasks") { TasksScreen(
                     modifier = Modifier.padding(inner),
                     state = state,
                     onToggleTask = vm::toggleTask,
@@ -75,8 +77,8 @@ private fun varTabScaffold(
                     externalFocusTaskId = focusTaskId,
                     onExternalFocusConsumed = onFocusConsumed
                 )
-
-                Tab.TAGS -> TagsScreen(
+                    }
+                Tab.TAGS -> stateHolder.SaveableStateProvider("tags") { TagsScreen(
                     modifier = Modifier.padding(inner),
                     state = state,
                     onAddTag = vm::addTag,
@@ -85,6 +87,7 @@ private fun varTabScaffold(
                     onRestoreTag = vm::restoreTag,
                     onPurgeTag = vm::purgeTag
                 )
+                    }
             }
         }
     }
