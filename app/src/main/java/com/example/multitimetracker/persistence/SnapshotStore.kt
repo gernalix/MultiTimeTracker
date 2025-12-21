@@ -1,4 +1,4 @@
-// v5
+// v6
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -25,6 +25,7 @@ object SnapshotStore {
         val tags: List<Tag>,
         val taskSessions: List<TaskSession>,
         val tagSessions: List<TagSession>,
+        val appUsageMs: Long,
         val activeTaskStart: Map<Long, Long>,
         val activeTagStart: List<ActiveTag>
     )
@@ -41,10 +42,13 @@ object SnapshotStore {
         tags: List<Tag>,
         taskSessions: List<TaskSession>,
         tagSessions: List<TagSession>,
+        appUsageMs: Long,
         activeTaskStart: Map<Long, Long>,
         activeTagStart: List<ActiveTag>
     ) {
         val root = JSONObject()
+
+        root.put("appUsageMs", appUsageMs)
 
         root.put("tasks", JSONArray().apply {
             tasks.forEach { t ->
@@ -140,6 +144,8 @@ object SnapshotStore {
         val taskSessions = root.getJSONArray("taskSessions").toTaskSessions()
         val tagSessions = root.getJSONArray("tagSessions").toTagSessions()
 
+        val appUsageMs = root.optLong("appUsageMs", 0L)
+
         val activeTaskStart = mutableMapOf<Long, Long>()
         root.optJSONArray("activeTaskStart")?.let { arr ->
             for (i in 0 until arr.length()) {
@@ -167,6 +173,7 @@ object SnapshotStore {
             tags = tags,
             taskSessions = taskSessions,
             tagSessions = tagSessions,
+            appUsageMs = appUsageMs,
             activeTaskStart = activeTaskStart.toMap(),
             activeTagStart = activeTagStart.toList()
         )

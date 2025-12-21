@@ -1,4 +1,4 @@
-// v21
+// v23
 package com.example.multitimetracker
 
 import android.content.Context
@@ -35,6 +35,9 @@ class MainViewModel : ViewModel() {
     private var appContext: Context? = null
     private var initialized = false
 
+    // Foreground app usage tracking (UI only). Persisted into snapshot + CSV.
+    private var appForegroundStartMs: Long? = null
+
     /**
      * Allows MainActivity to provide an application context before the main initialize()
      * (useful for first-run setup/import flows).
@@ -55,6 +58,7 @@ class MainViewModel : ViewModel() {
             tags = emptyList(),
             taskSessions = emptyList(),
             tagSessions = emptyList(),
+            appUsageMs = 0L,
             nowMs = System.currentTimeMillis()
         )
     )
@@ -67,6 +71,23 @@ class MainViewModel : ViewModel() {
                 _state.update { it.copy(nowMs = now) }
             }
         }
+    }
+    fun onAppForeground(nowMs: Long = System.currentTimeMillis()) {
+        if (appForegroundStartMs != null) return
+        appForegroundStartMs = nowMs
+        _state.update { it.copy(appUsageRunningSinceMs = nowMs) }
+    }
+    fun onAppBackground(nowMs: Long = System.currentTimeMillis()) {
+        val start = appForegroundStartMs ?: _state.value.appUsageRunningSinceMs ?: return
+        appForegroundStartMs = null
+        val delta = (nowMs - start).coerceAtLeast(0L)
+        _state.update { it.copy(
+            appUsageMs = it.appUsageMs + delta,
+            appUsageRunningSinceMs = null
+        ) }
+        if (delta <= 0L) return
+        persist()
+        scheduleAutoBackup()
     }
 
     /**
@@ -96,6 +117,8 @@ class MainViewModel : ViewModel() {
                     tags = snap.tags,
                     taskSessions = snap.taskSessions,
                     tagSessions = snap.tagSessions,
+                    appUsageMs = snap.appUsageMs,
+                    appUsageRunningSinceMs = null,
                     nowMs = System.currentTimeMillis()
                 )
             }
@@ -111,6 +134,7 @@ class MainViewModel : ViewModel() {
                 tags = emptyList(),
                 taskSessions = emptyList(),
                 tagSessions = emptyList(),
+                appUsageMs = 0L,
                 nowMs = System.currentTimeMillis()
             )
         }
@@ -143,6 +167,8 @@ fun reloadFromSnapshot(context: Context) {
             tags = snap.tags,
             taskSessions = snap.taskSessions,
             tagSessions = snap.tagSessions,
+            appUsageMs = snap.appUsageMs,
+                    appUsageRunningSinceMs = null,
             nowMs = System.currentTimeMillis()
         )
     }
@@ -162,11 +188,12 @@ fun reloadFromSnapshot(context: Context) {
         "sessions.csv" to "task_id,task_name,start_ts,end_ts",
         "totals.csv" to "task_id,task_name,total_ms",
         "tag_sessions.csv" to "tag_id,tag_name,task_id,task_name,start_ts,end_ts",
-        "tag_totals.csv" to "tag_id,tag_name,total_ms"
+        "tag_totals.csv" to "tag_id,tag_name,total_ms",
+        "app_usage.csv" to "total_ms"
     )
 
     /**
-     * Probe leggera: esistono i 4 file? Sono leggibili? Header compatibile?
+     * Probe leggera: esistono i file? Sono leggibili? Header compatibile?
      */
     fun probeBackupFolder(context: Context): BackupProbeResult {
         bindContext(context)
@@ -252,6 +279,7 @@ fun reloadFromSnapshot(context: Context) {
             tags = cur.tags,
             taskSessions = cur.taskSessions,
             tagSessions = cur.tagSessions,
+            appUsageMs = cur.appUsageMs,
             activeTaskStart = runtime.activeTaskStart,
             activeTagStart = runtime.activeTagStart.map { (taskId, tagId, startTs) ->
                 SnapshotStore.ActiveTag(taskId = taskId, tagId = tagId, startTs = startTs)
@@ -276,7 +304,7 @@ fun reloadFromSnapshot(context: Context) {
             .sortedBy { it.id }
             .joinToString("|") { t -> "${t.id}:${t.name}" }
 
-        return "${ts.size}|${tgs.size}|$lastTask|$lastTag|$tasksSig|$tagsSig"
+        return "${ts.size}|${tgs.size}|$lastTask|$lastTag|$tasksSig|$tagsSig|${_state.value.appUsageMs}"
     }
 
 
@@ -300,7 +328,8 @@ fun reloadFromSnapshot(context: Context) {
                     tasks = _state.value.tasks,
                     tags = _state.value.tags,
                     taskSessions = engine.getTaskSessions(),
-                    tagSessions = engine.getTagSessions()
+                    tagSessions = engine.getTagSessions(),
+                    appUsageMs = _state.value.appUsageMs
                 )
                 lastBackupSignature = sig
             }
@@ -341,7 +370,15 @@ fun reloadFromSnapshot(context: Context) {
 
         try {
             val dir = BackupFolderStore.getOrCreateDataDir(context)
-            CsvExporter.exportAllToDirectory(context, dir, _state.value.tasks, _state.value.tags, taskSessions, tagSessions)
+            CsvExporter.exportAllToDirectory(
+                context = context,
+                dir = dir,
+                tasks = _state.value.tasks,
+                tags = _state.value.tags,
+                taskSessions = taskSessions,
+                tagSessions = tagSessions,
+                appUsageMs = _state.value.appUsageMs
+            )
             lastBackupSignature = computeBackupSignature()
             Toast.makeText(context, "Export completato in '${dir.name ?: "MultiTimer data"}'", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
@@ -391,6 +428,8 @@ fun reloadFromSnapshot(context: Context) {
                 tags = snapshot.tags,
                 taskSessions = snapshot.taskSessions,
                 tagSessions = snapshot.tagSessions,
+                appUsageMs = snapshot.appUsageMs,
+                appUsageRunningSinceMs = null,
                 nowMs = System.currentTimeMillis()
             )
         }
@@ -671,6 +710,8 @@ fun exportCsv(context: Context) {
                         tags = snapshot.tags,
                         taskSessions = snapshot.taskSessions,
                         tagSessions = snapshot.tagSessions,
+                        appUsageMs = snapshot.appUsageMs,
+                        appUsageRunningSinceMs = null,
                         nowMs = System.currentTimeMillis()
                     )
                 }

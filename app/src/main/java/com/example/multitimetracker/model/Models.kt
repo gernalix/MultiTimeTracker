@@ -1,4 +1,4 @@
-// v6
+// v8
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -36,6 +36,10 @@ data class UiState(
     val tags: List<Tag>,
     val taskSessions: List<TaskSession>,
     val tagSessions: List<TagSession>,
+    /** Total time spent inside the app UI (foreground only). */
+    val appUsageMs: Long = 0L,
+    /** When non-null, the app is currently in foreground and this is the start timestamp. */
+    val appUsageRunningSinceMs: Long? = null,
     val activeTagStart: Map<Long, Long> = emptyMap(),
     val nowMs: Long
 )

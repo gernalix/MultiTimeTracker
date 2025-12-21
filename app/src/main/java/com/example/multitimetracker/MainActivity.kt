@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker
 
 import android.Manifest
@@ -29,6 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.ui.AppRoot
@@ -71,7 +74,21 @@ private fun MultiTimeTrackerApp(
     vm: MainViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val state by vm.state.collectAsState()
+
+    // Track "tempo trascorso sull'app" (foreground only).
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> vm.onAppForeground()
+                Lifecycle.Event.ON_PAUSE -> vm.onAppBackground()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val scope = rememberCoroutineScope()
 

@@ -1,4 +1,4 @@
-// v11
+// v14
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -20,9 +20,22 @@ import com.example.multitimetracker.model.TimeEngine
  * - totals.csv (opzionale, solo validazione)
  * - tag_sessions.csv
  * - tag_totals.csv (opzionale, solo validazione)
+ * - app_usage.csv (opzionale)
  * - dict.json (opzionale ma consigliato: anagrafica task/tag + associazioni)
  */
 object CsvImporter {
+    private fun pickByNameOrPrefix(byLowerName: Map<String, Uri>, exactName: String): Uri? {
+        val key = exactName.lowercase()
+        byLowerName[key]?.let { return it }
+        // Tolleranza: file duplicati come "app_usage (1).csv" oppure nomi case-insensitive.
+        return byLowerName.entries.firstOrNull { (k, _) -> k.startsWith(key.removeSuffix(".csv")) }?.value
+    }
+
+    private fun pickDocByNameOrPrefix(byLowerName: Map<String, DocumentFile>, exactName: String): DocumentFile? {
+        val key = exactName.lowercase()
+        byLowerName[key]?.let { return it }
+        return byLowerName.entries.firstOrNull { (k, _) -> k.startsWith(key.removeSuffix(".csv")) }?.value
+    }
 
     private const val LOG_TAG = "MT_IMPORT"
 
@@ -42,107 +55,158 @@ object CsvImporter {
         val tags: List<Tag>,
         val taskSessions: List<TaskSession>,
         val tagSessions: List<TagSession>,
+        val appUsageMs: Long,
         val runtimeSnapshot: TimeEngine.RuntimeSnapshot?
     )
 
-    fun importFromUris(context: Context, uris: List<Uri>): ImportedSnapshot {
-        if (uris.isEmpty()) throw IllegalArgumentException("Nessun file selezionato")
+    
+fun importFromUris(context: Context, uris: List<Uri>): ImportedSnapshot {
+    if (uris.isEmpty()) throw IllegalArgumentException("Nessun file selezionato")
 
-        i("importFromUris: START uris=${uris.size}")
+    i("importFromUris: START uris=${uris.size}")
 
-        val byName = uris.associateBy { uri -> displayName(context, uri) ?: uri.lastPathSegment.orEmpty() }
+    val byLowerName = uris.associateBy { uri -> (displayName(context, uri) ?: uri.lastPathSegment.orEmpty()).lowercase() }
+    i("importFromUris: files=${byLowerName.keys.sorted().joinToString(",")}")
 
-        i("importFromUris: files=${byName.keys.sorted().joinToString(",")}")
+    // Manifest-driven import (preferred). Falls back to legacy behavior when manifest is missing.
+    val manifestUri = pickByNameOrPrefix(byLowerName, BackupSchema.MANIFEST_FILE)
+    val manifest = manifestUri?.let { uri ->
+        runCatching { BackupSchema.parseManifestJson(readText(context, uri)) }
+            .onFailure { ex -> e("importFromUris: manifest.json parse failed uri=$uri", ex) }
+            .getOrNull()
+    }
+    val manifestFiles: List<BackupSchema.Entry> = manifest?.files?.takeIf { it.isNotEmpty() } ?: BackupSchema.entries
 
-        val dictUri = byName["dict.json"]
-        val dict: DictPayload? = dictUri?.let { uri ->
-            runCatching { parseDictJson(readText(context, uri)) }
-                .onFailure { ex -> e("importFromUris: dict.json parse failed uri=$uri", ex) }
-                .getOrNull()
+    var dict: DictPayload? = null
+    var taskSessions: List<TaskSession> = emptyList()
+    var tagSessions: List<TagSession> = emptyList()
+    var appUsageMs: Long = 0L
+
+    for (entry in manifestFiles) {
+        val uri = pickByNameOrPrefix(byLowerName, entry.name) ?: run {
+            if (entry.required) throw IllegalArgumentException("Manca ${entry.name}")
+            continue
         }
 
-        i(
-            "importFromUris: dict=${if (dict == null) "NO" else "YES"} " +
-                "tasks=${dict?.tasks?.size ?: 0} tags=${dict?.tags?.size ?: 0}"
-        )
-
-        val taskSessions = byName["sessions.csv"]?.let { parseTaskSessions(readLines(context, it)) } ?: emptyList()
-        val tagSessions = byName["tag_sessions.csv"]?.let { parseTagSessions(readLines(context, it)) } ?: emptyList()
-
-        i("importFromUris: sessions.csv rows=${taskSessions.size} tag_sessions.csv rows=${tagSessions.size}")
-
-        if (dict == null && (byName["sessions.csv"] == null || byName["tag_sessions.csv"] == null)) {
-            // Legacy import: without dict.json we need both session files to reconstruct tasks/tags.
-            if (byName["sessions.csv"] == null) throw IllegalArgumentException("Manca sessions.csv")
-            if (byName["tag_sessions.csv"] == null) throw IllegalArgumentException("Manca tag_sessions.csv")
+        when (entry.handlerId) {
+            "dict_v1" -> {
+                dict = runCatching { parseDictJson(readText(context, uri)) }
+                    .onFailure { ex -> e("importFromUris: dict.json parse failed uri=$uri", ex) }
+                    .getOrNull()
+            }
+            "sessions_v1" -> taskSessions = parseTaskSessions(readLines(context, uri))
+            "tag_sessions_v1" -> tagSessions = parseTagSessions(readLines(context, uri))
+            "app_usage_v1" -> appUsageMs = parseAppUsage(readLines(context, uri))
+            else -> {
+                // ignore (e.g., totals.csv validation-only)
+            }
         }
-
-        val out = buildSnapshot(
-            baseTasks = dict?.tasks,
-            baseTags = dict?.tags,
-            taskSessions = taskSessions,
-            tagSessions = tagSessions
-        )
-
-        i(
-            "importFromUris: END tasks=${out.tasks.size} tags=${out.tags.size} " +
-                "taskSessions=${out.taskSessions.size} tagSessions=${out.tagSessions.size} " +
-                "runtimeSnapshot=${out.runtimeSnapshot != null}"
-        )
-        return out
     }
 
+    i(
+        "importFromUris: manifest=${if (manifest == null) "NO" else "YES"} " +
+            "tasks=${dict?.tasks?.size ?: 0} tags=${dict?.tags?.size ?: 0}"
+    )
+    i("importFromUris: sessions.csv rows=${taskSessions.size} tag_sessions.csv rows=${tagSessions.size}")
 
-    /**
+    // Extra-file diagnostics (only meaningful when manifest exists)
+    if (manifest != null) {
+        val known = manifestFiles.map { it.name.lowercase() }.toSet() + BackupSchema.MANIFEST_FILE.lowercase()
+        val extras = byLowerName.keys.filter { it !in known }.sorted()
+        if (extras.isNotEmpty()) w("importFromUris: extra files not in manifest: ${extras.joinToString(",")}")
+    }
+
+    val out = buildSnapshot(
+        baseTasks = dict?.tasks,
+        baseTags = dict?.tags,
+        taskSessions = taskSessions,
+        tagSessions = tagSessions,
+        appUsageMs = appUsageMs
+    )
+
+    i(
+        "importFromUris: END tasks=${out.tasks.size} tags=${out.tags.size} " +
+            "taskSessions=${out.taskSessions.size} tagSessions=${out.tagSessions.size} " +
+            "runtimeSnapshot=${out.runtimeSnapshot != null}"
+    )
+    return out
+}
+
+/**
      * Import directly from the persistent backup folder (MultiTimer data) without any file picker.
      */
-    fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapshot {
-        i("importFromBackupFolder: START dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
+    
+fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapshot {
+    i("importFromBackupFolder: START dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
 
-        val dictDoc = dir.findFile("dict.json")
-        val dict: DictPayload? = dictDoc?.let { doc: DocumentFile ->
-            if (!doc.canRead()) null else runCatching { parseDictJson(readText(context, doc.uri)) }.getOrNull()
+    val byLowerName: Map<String, DocumentFile> = dir.listFiles()
+        .filter { it.name != null }
+        .associateBy { it.name!!.lowercase() }
+
+    val manifestDoc = pickDocByNameOrPrefix(byLowerName, BackupSchema.MANIFEST_FILE)
+    val manifest = manifestDoc
+        ?.takeIf { it.canRead() }
+        ?.let { doc -> runCatching { BackupSchema.parseManifestJson(readText(context, doc.uri)) }.getOrNull() }
+
+    val manifestFiles: List<BackupSchema.Entry> = manifest?.files?.takeIf { it.isNotEmpty() } ?: BackupSchema.entries
+
+    var dict: DictPayload? = null
+    var taskSessions: List<TaskSession> = emptyList()
+    var tagSessions: List<TagSession> = emptyList()
+    var appUsageMs: Long = 0L
+
+    for (entry in manifestFiles) {
+        val doc = pickDocByNameOrPrefix(byLowerName, entry.name) ?: run {
+            if (entry.required) throw IllegalArgumentException("Manca ${entry.name} in '${dir.name ?: "backup"}'")
+            continue
         }
+        if (!doc.canRead()) continue
 
-        i(
-            "importFromBackupFolder: dict=${if (dict == null) "NO" else "YES"} " +
-                "tasks=${dict?.tasks?.size ?: 0} tags=${dict?.tags?.size ?: 0}"
-        )
-
-        val taskSessionsDoc = dir.findFile("sessions.csv")
-        val tagSessionsDoc = dir.findFile("tag_sessions.csv")
-
-        val taskSessions = taskSessionsDoc?.let { parseTaskSessions(readLines(context, it.uri)) } ?: emptyList()
-        val tagSessions = tagSessionsDoc?.let { parseTagSessions(readLines(context, it.uri)) } ?: emptyList()
-
-        i("importFromBackupFolder: sessions.csv rows=${taskSessions.size} tag_sessions.csv rows=${tagSessions.size}")
-
-        if (dict == null && (taskSessionsDoc == null || tagSessionsDoc == null)) {
-            if (taskSessionsDoc == null) throw IllegalArgumentException("Manca sessions.csv in '${dir.name ?: "backup"}'")
-            if (tagSessionsDoc == null) throw IllegalArgumentException("Manca tag_sessions.csv in '${dir.name ?: "backup"}'")
+        when (entry.handlerId) {
+            "dict_v1" -> dict = runCatching { parseDictJson(readText(context, doc.uri)) }.getOrNull()
+            "sessions_v1" -> taskSessions = parseTaskSessions(readLines(context, doc.uri))
+            "tag_sessions_v1" -> tagSessions = parseTagSessions(readLines(context, doc.uri))
+            "app_usage_v1" -> appUsageMs = parseAppUsage(readLines(context, doc.uri))
+            else -> {
+                // ignore
+            }
         }
-
-        val out = buildSnapshot(
-            baseTasks = dict?.tasks,
-            baseTags = dict?.tags,
-            taskSessions = taskSessions,
-            tagSessions = tagSessions
-        )
-
-        i(
-            "importFromBackupFolder: END tasks=${out.tasks.size} tags=${out.tags.size} " +
-                "taskSessions=${out.taskSessions.size} tagSessions=${out.tagSessions.size} " +
-                "runtimeSnapshot=${out.runtimeSnapshot != null}"
-        )
-        return out
     }
 
+    i(
+        "importFromBackupFolder: manifest=${if (manifest == null) "NO" else "YES"} " +
+            "tasks=${dict?.tasks?.size ?: 0} tags=${dict?.tags?.size ?: 0}"
+    )
+    i("importFromBackupFolder: sessions.csv rows=${taskSessions.size} tag_sessions.csv rows=${tagSessions.size}")
 
-    private fun buildSnapshot(
+    if (manifest != null) {
+        val known = manifestFiles.map { it.name.lowercase() }.toSet() + BackupSchema.MANIFEST_FILE.lowercase()
+        val extras = byLowerName.keys.filter { it !in known }.sorted()
+        if (extras.isNotEmpty()) w("importFromBackupFolder: extra files not in manifest: ${extras.joinToString(",")}")
+    }
+
+    val out = buildSnapshot(
+        baseTasks = dict?.tasks,
+        baseTags = dict?.tags,
+        taskSessions = taskSessions,
+        tagSessions = tagSessions,
+        appUsageMs = appUsageMs
+    )
+
+    i(
+        "importFromBackupFolder: END tasks=${out.tasks.size} tags=${out.tags.size} " +
+            "taskSessions=${out.taskSessions.size} tagSessions=${out.tagSessions.size} " +
+            "runtimeSnapshot=${out.runtimeSnapshot != null}"
+    )
+    return out
+}
+
+private fun buildSnapshot(
         baseTasks: List<Task>?,
         baseTags: List<Tag>?,
         taskSessions: List<TaskSession>,
-        tagSessions: List<TagSession>
+        tagSessions: List<TagSession>,
+        appUsageMs: Long
     ): ImportedSnapshot {
 
         i(
@@ -281,6 +345,7 @@ object CsvImporter {
             tags = tags,
             taskSessions = taskSessions,
             tagSessions = tagSessions,
+            appUsageMs = appUsageMs,
             runtimeSnapshot = runtime
         )
     }
@@ -410,6 +475,17 @@ object CsvImporter {
                 endTs = row[5].toLong()
             )
         }
+    }
+
+    private fun parseAppUsage(lines: List<String>): Long {
+        if (lines.isEmpty()) return 0L
+        val header = lines.first().trim()
+        if (header != "total_ms") {
+            throw IllegalArgumentException("Header app_usage.csv non valido")
+        }
+        val valueLine = lines.drop(1).firstOrNull()?.trim().orEmpty()
+        if (valueLine.isBlank()) return 0L
+        return runCatching { valueLine.toLong() }.getOrDefault(0L)
     }
 
     /**

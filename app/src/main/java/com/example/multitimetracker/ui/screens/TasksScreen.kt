@@ -1,8 +1,9 @@
-// v21
+// v23
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
 import android.content.Context
+import android.widget.Toast
 import android.net.Uri
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -159,10 +161,12 @@ fun TasksScreen(
 
     // Requirements:
     // - running tasks on top
-    // - newest to oldest
+    // - among running: most recently started first
+    // - among not running: newest to oldest
     val orderedTasks = remember(filteredTasks) {
         filteredTasks.sortedWith(
             compareByDescending<com.example.multitimetracker.model.Task> { it.isRunning }
+                .thenByDescending { it.lastStartedAtMs ?: 0L }
                 .thenByDescending { it.id }
         )
     }
@@ -319,11 +323,13 @@ fun TasksScreen(
                                     // Swipe left -> trash
                                     // Smooth removal before moving to trash.
                                     val id = task.id
+                                    val taskName = task.name
                                     if (!removingTaskIds.contains(id)) {
                                         removingTaskIds = removingTaskIds + id
                                         scope.launch {
-                                            delay(800)
+                                            delay(600)
                                             onDeleteTask(id)
+                                            Toast.makeText(context, "Task $taskName eliminato", Toast.LENGTH_SHORT).show()
                                             removingTaskIds = removingTaskIds - id
                                         }
                                     }
@@ -339,8 +345,10 @@ fun TasksScreen(
                         visible = !removingTaskIds.contains(task.id),
                         enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
                             fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
-                        exit = shrinkVertically(animationSpec = tween(800, easing = FastOutSlowInEasing)) +
-                            fadeOut(animationSpec = tween(800, easing = FastOutSlowInEasing))
+                        exit = slideOutHorizontally(
+                            animationSpec = tween(600, easing = FastOutSlowInEasing),
+                            targetOffsetX = { -it }
+                        ) + fadeOut(animationSpec = tween(600, easing = FastOutSlowInEasing))
                     ) {
                         SwipeToDismissBox(
                             state = dismissState,
@@ -436,12 +444,21 @@ fun TasksScreen(
 
     // Settings (minimal stats).
     if (showSettings) {
-        val totalFromSessions = state.taskSessions.sumOf { s -> (s.endTs - s.startTs).coerceAtLeast(0L) }
-        val runningExtra = state.tasks
+        val intervals = ArrayList<Pair<Long, Long>>(state.taskSessions.size + state.tasks.size)
+        state.taskSessions.forEach { s ->
+            val st = s.startTs
+            val en = s.endTs
+            if (en > st) intervals.add(st to en)
+        }
+        state.tasks
             .asSequence()
             .filter { it.isRunning && it.lastStartedAtMs != null }
-            .sumOf { t -> (state.nowMs - (t.lastStartedAtMs ?: state.nowMs)).coerceAtLeast(0L) }
-        val totalTracked = totalFromSessions + runningExtra
+            .forEach { t ->
+                val st = t.lastStartedAtMs ?: state.nowMs
+                val en = state.nowMs
+                if (en > st) intervals.add(st to en)
+            }
+        val totalTracked = unionTotalMs(intervals)
 
         val tasksTotal = state.tasks.count { !it.isDeleted }
         val tagsTotal = state.tags.count { !it.isDeleted }
@@ -453,8 +470,16 @@ fun TasksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked)}")
+                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (state.nowMs - it).coerceAtLeast(0L) } ?: 0L)
+                    Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
+
+                    Spacer(Modifier.height(6.dp))
+                    Text("Suggerimento", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Se per un periodo ti servono solo pochi task, puoi creare un tag ⭐ e tappare sul chip filtro ⭐ per vedere solo quelli."
+                    )
                 }
             },
             confirmButton = {
@@ -838,4 +863,25 @@ private fun formatDuration(ms: Long): String {
     val min = totalMin % 60
     val hours = totalMin / 60
     return "%02d:%02d:%02d".format(hours, min, sec)
+}
+
+private fun unionTotalMs(intervals: List<Pair<Long, Long>>): Long {
+    if (intervals.isEmpty()) return 0L
+    val sorted = intervals.sortedBy { it.first }
+    var total = 0L
+    var curStart = sorted[0].first
+    var curEnd = sorted[0].second
+    for (i in 1 until sorted.size) {
+        val (s, e) = sorted[i]
+        if (e <= s) continue
+        if (s <= curEnd) {
+            if (e > curEnd) curEnd = e
+        } else {
+            total += (curEnd - curStart)
+            curStart = s
+            curEnd = e
+        }
+    }
+    total += (curEnd - curStart)
+    return total.coerceAtLeast(0L)
 }

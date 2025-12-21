@@ -1,4 +1,4 @@
-// v12
+// v14
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -81,7 +81,15 @@ object CsvExporter {
     /**
      * Full export into a directory called from automatic backup/import flows.
      */
-    fun exportAllToDirectory(context: Context, dir: DocumentFile, tasks: List<Task>, tags: List<Tag>, taskSessions: List<TaskSession>, tagSessions: List<TagSession>) {
+    fun exportAllToDirectory(
+        context: Context,
+        dir: DocumentFile,
+        tasks: List<Task>,
+        tags: List<Tag>,
+        taskSessions: List<TaskSession>,
+        tagSessions: List<TagSession>,
+        appUsageMs: Long
+    ) {
 
         // 5° file: dict.json (anagrafica task/tag + associazioni task↔tag), leggibile da umani.
         writeTextToDir(context, dir, "application/json", "dict.json") { w ->
@@ -163,6 +171,15 @@ object CsvExporter {
             totals.forEach { (k, total) ->
                 w.appendLine("${k.first},${csvEscape(k.second)},$total")
             }
+        }
+
+        writeCsvToDir(context, dir, "app_usage.csv") { w ->
+            w.appendLine("total_ms")
+            w.appendLine(appUsageMs.toString())
+        }
+
+        writeTextToDir(context, dir, "application/json", BackupSchema.MANIFEST_FILE) { w ->
+            w.append(BackupSchema.buildManifestJson())
         }
     }
 
