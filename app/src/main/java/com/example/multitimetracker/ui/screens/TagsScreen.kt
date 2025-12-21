@@ -1,10 +1,11 @@
-// v14
+// v16
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+// NOTE: inside LazyColumn item scopes AnimatedVisibility can resolve to the ColumnScope overload.
+// We call it fully qualified where needed to avoid implicit receiver ambiguity.
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
@@ -17,26 +18,31 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -150,7 +156,11 @@ fun TagsScreen(
             )
         }
 
-        LazyColumn(
+        val listState = rememberLazyListState()
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+            state = listState,
             modifier = Modifier
                 .padding(inner)
                 .fillMaxSize(),
@@ -206,7 +216,7 @@ fun TagsScreen(
                     }
                 )
 
-                AnimatedVisibility(
+                androidx.compose.animation.AnimatedVisibility(
                     visible = !removingTagIds.contains(tag.id),
                     enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
                         fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
@@ -259,6 +269,26 @@ fun TagsScreen(
                         )
                         }
                     )
+                }
+            }
+        }
+
+            val showScrollToTop = listState.firstVisibleItemIndex > 0
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showScrollToTop,
+                enter = fadeIn(animationSpec = tween(150)),
+                exit = fadeOut(animationSpec = tween(150)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 92.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    modifier = Modifier.size(44.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
                 }
             }
         }

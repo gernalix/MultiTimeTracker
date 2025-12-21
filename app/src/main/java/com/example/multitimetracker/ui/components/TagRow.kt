@@ -1,25 +1,27 @@
-// v8
+// v10
 package com.example.multitimetracker.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
 
+/**
+ * Riga tag in stile "lista compatta" (variante B: due righe).
+ * Solo UI: nessuna logica/meccanismo viene cambiato.
+ */
 @Composable
 fun TagRow(
     color: Color,
@@ -30,33 +32,47 @@ fun TagRow(
     sharedCount: Int,
     onOpen: () -> Unit
 ) {
-    val runningBg = remember { Color(0xFFCCFFCC) }
+    val nameBg = color.copy(alpha = 0.35f)
+    val secondaryAlpha = if (highlightRunning) 1.0f else 0.85f
+    val sharedSuffix = if (sharedCount > 0) " • ⛓ $sharedCount" else ""
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpen() },
-        colors = if (highlightRunning) CardDefaults.cardColors(containerColor = runningBg) else CardDefaults.cardColors()
+            .clickable { onOpen() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .padding(14.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+                .weight(1f)
+                .padding(end = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                AssistChip(
-                    onClick = { onOpen() },
-                    label = { Text(tag.name, style = MaterialTheme.typography.titleMedium) },
-                    colors = AssistChipDefaults.assistChipColors(containerColor = color.copy(alpha = 0.35f))
-                )
-                val sharedSuffix = if (sharedCount > 0) " • ⛓ $sharedCount" else ""
-                Text(runningText + sharedSuffix, style = MaterialTheme.typography.labelMedium)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(formatDuration(shownMs), style = MaterialTheme.typography.titleMedium)
-            }
+            // Riga 1: "pill" col nome
+            Text(
+                text = tag.name,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .background(nameBg, RoundedCornerShape(50))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+
+            // Riga 2: stato + shared
+            Text(
+                text = runningText + sharedSuffix,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .padding(start = 2.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = secondaryAlpha)
+            )
         }
+
+        // Totale a destra
+        Text(
+            text = formatDuration(shownMs),
+            style = MaterialTheme.typography.labelLarge
+        )
     }
 }
 
