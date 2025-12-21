@@ -1,4 +1,4 @@
-// v10
+// v12
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,36 +45,36 @@ fun TagRow(
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Sinistra: nome + sotto-riga info (variante B)
         Column(
             modifier = Modifier
-                .weight(1f)
-                .padding(end = 10.dp),
+                .align(Alignment.CenterStart)
+                .padding(end = 88.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            // Riga 1: "pill" col nome
             Text(
-                text = tag.name,
+                text = tag.name + sharedSuffix,
                 style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .background(nameBg, RoundedCornerShape(50))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-
-            // Riga 2: stato + shared
             Text(
-                text = runningText + sharedSuffix,
+                text = runningText,
                 style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier
-                    .padding(start = 2.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = secondaryAlpha)
             )
         }
 
-        // Totale a destra
+        // Destra: durata totale
         Text(
+            modifier = Modifier.align(Alignment.CenterEnd),
             text = formatDuration(shownMs),
             style = MaterialTheme.typography.labelLarge
         )
+    }
     }
 }
 

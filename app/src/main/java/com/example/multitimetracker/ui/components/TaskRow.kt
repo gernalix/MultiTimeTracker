@@ -1,36 +1,47 @@
 // v11
 package com.example.multitimetracker.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
+import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.TimeEngine
-import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TaskRow(
     tagColors: Map<Long, Color>,
@@ -44,13 +55,15 @@ fun TaskRow(
     onOpenLink: () -> Unit
 ) {
     val engine = TimeEngine()
-    var showTagsSheet by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-
     val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
     val taskTags = tags.filter { task.tagIds.contains(it.id) }
 
+    var showAllTags by remember { mutableStateOf(false) }
+
     val runningBg = remember { Color(0xFFCCFFCC) }
-    Card(
+    val bg = if (highlightRunning) runningBg else Color.Transparent
+
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .pointerInput(Unit) {
@@ -59,91 +72,54 @@ fun TaskRow(
                     onLongPress = { onLongPress() }
                 )
             },
-        colors = if (highlightRunning) {
-            CardDefaults.cardColors(containerColor = runningBg)
-        } else {
-            CardDefaults.cardColors()
-        }
+        color = bg,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(task.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (task.isRunning) "In corso" else "In pausa",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-            }
-
-            Text(formatDuration(shownMs), style = MaterialTheme.typography.headlineSmall)
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // Compact, dense 2-column layout: main text left, metadata right.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // LEFT: title + small status/link line (2 lines total)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
+                    .padding(end = 78.dp) // reserve space for the right column to avoid weight()
             ) {
-                if (linkText.isNotBlank()) {
-                    AssistChip(
-                        onClick = onOpenLink,
-                        label = { Text(linkText) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = task.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.EllIPSIS
                     )
-                }
-                val maxInline = 2
-                val visibleTags = taskTags.take(maxInline)
-                val hiddenCount = (taskTags.size - visibleTags.size).coerceAtLeast(0)
 
-                visibleTags.forEach { tag ->
-                    val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
-                    val bg = base.copy(alpha = 0.35f)
-                    AssistChip(
-                        onClick = { },
-                        label = { Text(tag.name) },
-                        colors = AssistChipDefaults.assistChipColors(containerColor = bg)
-                    )
-                }
-
-                if (hiddenCount > 0) {
-                    AssistChip(
-                        onClick = { showTagsSheet = true },
-                        label = { Text("+$hiddenCount") },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                        )
-                    )
-                }
-            }
-        }
-
-
-            if (showTagsSheet) {
-                androidx.compose.material3.ModalBottomSheet(
-                    onDismissRequest = { showTagsSheet = false }
-                ) {
-                    androidx.compose.foundation.layout.Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Tag del task", style = MaterialTheme.typography.titleMedium)
+                        val statusText = if (task.isRunning) "Running" else "Paused"
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.EllIPSIS
+                        )
 
-                        androidx.compose.foundation.lazy.LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(taskTags, key = { it.id }) { tag ->
-                                val base = tagColors[tag.id] ?: remember(tag.id) { tagColorFromSeed(tag.id.toString()) }
-                                val bg = base.copy(alpha = 0.35f)
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text(tag.name) },
-                                    colors = AssistChipDefaults.assistChipColors(containerColor = bg)
+                        if (linkText.isNotBlank()) {
+                            IconButton(
+                                onClick = onOpenLink,
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowRight,
+                                    contentDescription = "Open link",
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -151,8 +127,118 @@ fun TaskRow(
                 }
             }
 
+            // RIGHT: time + tags (compact)
+            Column(
+                modifier = Modifier
+                    .width(78.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = formatDuration(shownMs),
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1
+                )
+
+                CompactTagLine(
+                    tags = taskTags,
+                    tagColors = tagColors,
+                    maxVisible = 2,
+                    onOverflowClick = { showAllTags = true }
+                )
+            }
+        }
+    }
+
+    if (showAllTags) {
+        ModalBottomSheet(
+            onDismissRequest = { showAllTags = false }
+        ) {
+            Text(
+                text = "Tags",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                taskTags.forEach { tag ->
+                    CompactTagChip(
+                        label = tag.name,
+                        color = tagColors[tag.id] ?: MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
     }
 }
+
+@Composable
+private fun CompactTagLine(
+    tags: List<Tag>,
+    tagColors: Map<Long, Color>,
+    maxVisible: Int,
+    onOverflowClick: () -> Unit
+) {
+    val visible = tags.take(maxVisible)
+    val overflow = tags.size - visible.size
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        visible.forEach { tag ->
+            CompactTagChip(
+                label = tag.name,
+                color = tagColors[tag.id] ?: MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
+        if (overflow > 0) {
+            // Small translucent +N chip
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { onOverflowClick() })
+                    }
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "+$overflow",
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactTagChip(
+    label: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(color.copy(alpha = 0.35f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.EllIPSIS
+        )
+    }
+}
+
 
 private fun formatDuration(ms: Long): String {
     val totalSec = ms / 1000

@@ -1,6 +1,10 @@
 // v27
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.FloatingActionButtonDefaults
 
 import android.content.Context
 import android.widget.Toast
@@ -8,8 +12,7 @@ import android.net.Uri
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-// NOTE: inside LazyColumn item scopes AnimatedVisibility can resolve to the ColumnScope overload.
-// We call it fully qualified where needed to avoid implicit receiver ambiguity.
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutHorizontally
@@ -27,7 +30,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -41,7 +43,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -320,14 +321,14 @@ fun TasksScreen(
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(orderedTasks, key = { it.id }) { task ->
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(orderedTasks, key = { it.id }) { task ->
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             when (value) {
@@ -357,7 +358,7 @@ fun TasksScreen(
                         }
                     )
 
-                    androidx.compose.animation.AnimatedVisibility(
+                    AnimatedVisibility(
                         visible = !removingTaskIds.contains(task.id),
                         enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
                             fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
@@ -421,27 +422,27 @@ fun TasksScreen(
                         )
                     }
                 }
-            }
+                }
 
-            val showScrollToTop = listState.firstVisibleItemIndex > 0
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showScrollToTop,
-                enter = fadeIn(animationSpec = tween(150)),
-                exit = fadeOut(animationSpec = tween(150)),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 92.dp)
-            ) {
-                FloatingActionButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    modifier = Modifier.size(44.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
+                // Scroll-to-top button (only when not at the top)
+                val showScrollToTop by remember {
+                    derivedStateOf { listState.firstVisibleItemIndex > 0 }
+                }
+                if (showScrollToTop) {
+                    FloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 18.dp)
+                            .size(42.dp),
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp)
+                    ) {
+                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Back to top")
+                    }
                 }
             }
-        }
         }
     }
 
