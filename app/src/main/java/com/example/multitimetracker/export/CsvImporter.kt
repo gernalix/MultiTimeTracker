@@ -1,4 +1,4 @@
-// v14
+// v15
 package com.example.multitimetracker.export
 
 import android.content.Context
@@ -83,7 +83,8 @@ fun importFromUris(context: Context, uris: List<Uri>): ImportedSnapshot {
     var appUsageMs: Long = 0L
 
     for (entry in manifestFiles) {
-        val uri = pickByNameOrPrefix(byLowerName, entry.name) ?: run {
+        val uri = pickByNameOrPrefix(byLowerName, entry.name)
+        if (uri == null) {
             if (entry.required) throw IllegalArgumentException("Manca ${entry.name}")
             continue
         }
@@ -156,7 +157,8 @@ fun importFromBackupFolder(context: Context, dir: DocumentFile): ImportedSnapsho
     var appUsageMs: Long = 0L
 
     for (entry in manifestFiles) {
-        val doc = pickDocByNameOrPrefix(byLowerName, entry.name) ?: run {
+        val doc = pickDocByNameOrPrefix(byLowerName, entry.name)
+        if (doc == null) {
             if (entry.required) throw IllegalArgumentException("Manca ${entry.name} in '${dir.name ?: "backup"}'")
             continue
         }
