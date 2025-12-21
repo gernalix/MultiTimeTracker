@@ -1,4 +1,5 @@
-// v16
+// v19
+@file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -87,8 +88,9 @@ fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // LEFT: title + small status/link line (2 lines total)
+            // Give more space to the right side so we can show multiple tag chips.
             Column(
-                modifier = Modifier.fillMaxWidth(0.68f),
+                modifier = Modifier.fillMaxWidth(0.55f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
@@ -102,16 +104,14 @@ fun TaskRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val statusText = if (task.isRunning) "Running" else "Paused"
+                    val statusEmoji = if (task.isRunning) "▶️" else "⏸️"
                     Text(
-                        text = statusText,
+                        text = statusEmoji,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
                     )
-
-                    if (linkText.isNotBlank()) {
+if (linkText.isNotBlank()) {
                         IconButton(
                             onClick = onOpenLink,
                             modifier = Modifier.size(26.dp)
@@ -128,8 +128,7 @@ fun TaskRow(
 
             // RIGHT: time + tags (compact)
             Column(
-                modifier = Modifier
-                    .width(78.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -142,7 +141,8 @@ fun TaskRow(
                 CompactTagLine(
                     tags = taskTags,
                     tagColors = tagColors,
-                    maxVisible = 2,
+                    // We show more than one chip by default; overflow still goes to the bottom sheet.
+                    maxVisible = 8,
                     onOverflowClick = { showAllTags = true }
                 )
             }
@@ -187,9 +187,10 @@ private fun CompactTagLine(
     val visible = tags.take(maxVisible)
     val overflow = tags.size - visible.size
 
-    Row(
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         visible.forEach { tag ->
             CompactTagChip(

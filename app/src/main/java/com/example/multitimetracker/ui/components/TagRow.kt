@@ -1,4 +1,4 @@
-// v12
+// v15
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -35,13 +35,18 @@ fun TagRow(
     onOpen: () -> Unit
 ) {
     val nameBg = color.copy(alpha = 0.35f)
+    // Slightly stronger than the app background so it's unmistakable.
+    val runningBg = Color(0xFFCCFFCC)
     val secondaryAlpha = if (highlightRunning) 1.0f else 0.85f
-    val sharedSuffix = if (sharedCount > 0) " • ⛓ $sharedCount" else ""
+    // Shows how many tasks (total) are associated with this tag.
+    // Kept short to avoid visual noise.
+    val sharedSuffix = if (sharedCount > 0) " • $sharedCount" else ""
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onOpen() }
+            .background(if (highlightRunning) runningBg else Color.Transparent, RoundedCornerShape(10.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
