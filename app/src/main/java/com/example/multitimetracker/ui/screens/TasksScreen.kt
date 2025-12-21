@@ -1,4 +1,4 @@
-// v24
+// v25
 package com.example.multitimetracker.ui.screens
 import androidx.compose.material3.MaterialTheme
 
@@ -109,6 +109,17 @@ fun TasksScreen(
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTrash by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+
+    // Local UI ticker used for stats that must update even when no task is running.
+    // (e.g. "Tempo trascorso sull'app" inside the settings dialog)
+    var localNowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(showSettings) {
+        if (!showSettings) return@LaunchedEffect
+        while (showSettings) {
+            localNowMs = System.currentTimeMillis()
+            delay(250)
+        }
+    }
     var openedTaskId by remember { mutableStateOf<Long?>(null) }
 
     // Smooth removal animation for swipe-to-trash.
@@ -471,7 +482,7 @@ fun TasksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked)}")
-                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (state.nowMs - it).coerceAtLeast(0L) } ?: 0L)
+                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L)
                     Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")

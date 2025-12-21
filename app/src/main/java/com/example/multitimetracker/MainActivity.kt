@@ -1,4 +1,4 @@
-// v7
+// v8
 package com.example.multitimetracker
 
 import android.Manifest
@@ -87,6 +87,12 @@ private fun MultiTimeTrackerApp(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        // If we start observing AFTER the Activity is already RESUMED (common on first composition),
+        // we won't receive ON_RESUME and the "app usage" counter would stay frozen until the next resume.
+        // So we eagerly sync the current state.
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            vm.onAppForeground()
+        }
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
