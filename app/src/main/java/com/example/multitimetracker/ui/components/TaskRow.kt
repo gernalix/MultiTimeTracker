@@ -1,4 +1,4 @@
-// v19
+// v20
 @file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
@@ -51,6 +51,8 @@ fun TaskRow(
     tags: List<Tag>,
     nowMs: Long,
     highlightRunning: Boolean,
+    showTime: Boolean = true,
+    showTags: Boolean = true,
     highlightJustCreated: Boolean = false,
     onToggle: () -> Unit,
     onLongPress: () -> Unit,
@@ -132,19 +134,23 @@ if (linkText.isNotBlank()) {
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = formatDuration(shownMs),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1
-                )
+                if (showTime) {
+                    Text(
+                        text = formatDuration(shownMs),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1
+                    )
+                }
 
-                CompactTagLine(
+                if (showTags) {
+                    CompactTagLine(
                     tags = taskTags,
                     tagColors = tagColors,
                     // We show more than one chip by default; overflow still goes to the bottom sheet.
                     maxVisible = 8,
                     onOverflowClick = { showAllTags = true }
                 )
+                }
             }
         }
     }

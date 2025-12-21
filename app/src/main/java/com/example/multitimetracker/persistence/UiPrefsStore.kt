@@ -1,0 +1,37 @@
+// v1
+package com.example.multitimetracker.persistence
+
+import android.content.Context
+
+/**
+ * Tiny UI preferences stored in SharedPreferences.
+ * Keep this intentionally small: only view toggles that affect rendering.
+ */
+object UiPrefsStore {
+    private const val PREFS = "ui_prefs"
+
+    private const val KEY_HIDE_INACTIVE_TIME = "hide_inactive_task_time"
+    private const val KEY_HIDE_INACTIVE_TAGS = "hide_inactive_task_tags"
+
+    fun getHideInactiveTime(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_HIDE_INACTIVE_TIME, false)
+
+    fun setHideInactiveTime(context: Context, value: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_HIDE_INACTIVE_TIME, value)
+            .apply()
+    }
+
+    fun getHideInactiveTags(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_HIDE_INACTIVE_TAGS, false)
+
+    fun setHideInactiveTags(context: Context, value: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_HIDE_INACTIVE_TAGS, value)
+            .apply()
+    }
+}

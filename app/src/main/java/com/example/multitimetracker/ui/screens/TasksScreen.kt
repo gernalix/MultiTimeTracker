@@ -1,101 +1,100 @@
-// v34
+// v35
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 package com.example.multitimetracker.ui.screens
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.material3.Surface
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.FloatingActionButtonDefaults
 
 import android.content.Context
-import android.widget.Toast
-import android.net.Uri
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.Alignment
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.BackupFolderStore
+import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.model.Tag
 import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
+import com.example.multitimetracker.persistence.UiPrefsStore
 import com.example.multitimetracker.ui.components.TaskRow
-import com.example.multitimetracker.ui.theme.tagColorFromSeed
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlinx.coroutines.launch
+import com.example.multitimetracker.ui.theme.tagColorFromSeed
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun TasksScreen(
@@ -110,26 +109,30 @@ fun TasksScreen(
     onPurgeTask: (Long) -> Unit,
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
-    onSetBackupRootFolder: (Context, android.net.Uri) -> Unit,
+    onSetBackupRootFolder: (Context, Uri) -> Unit,
     externalFocusTaskId: Long? = null,
     onExternalFocusConsumed: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
     var showTrash by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-
-    // Local UI ticker used for stats that must update even when no task is running.
-    // (e.g. "Tempo trascorso sull'app" inside the settings dialog)
-    var localNowMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(showSettings) {
-        if (!showSettings) return@LaunchedEffect
-        while (showSettings) {
-            localNowMs = System.currentTimeMillis()
-            delay(250)
-        }
-    }
     var openedTaskId by remember { mutableStateOf<Long?>(null) }
+
+    // Filter UI is hidden by default and appears only via the top button.
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedTagFilters by rememberSaveable { mutableStateOf(setOf<Long>()) }
+
+    // View prefs for inactive tasks (persisted).
+    var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
+    var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -138,24 +141,21 @@ fun TasksScreen(
     var highlightTaskId by remember { mutableStateOf<Long?>(null) }
     var lastSeenMaxTaskId by rememberSaveable { mutableStateOf(-1L) }
 
-    var query by remember { mutableStateOf("") }
-    var selectedTagFilters by remember { mutableStateOf(setOf<Long>()) }
-
-    val context = LocalContext.current
-    val engine = remember { TimeEngine() }
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
+    // Local UI ticker used for stats that must update even when no task is running.
+    var localNowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(showSettings) {
+        if (!showSettings) return@LaunchedEffect
+        while (showSettings) {
+            localNowMs = System.currentTimeMillis()
+            delay(250)
+        }
+    }
 
     val visibleTags = remember(state.tags) { state.tags.filter { !it.isDeleted } }
     val visibleTasks = remember(state.tasks) { state.tasks.filter { !it.isDeleted } }
-
     val tagColors = remember(visibleTags) { assignDistinctTagColors(visibleTags) }
 
     var pendingAfterFolderPick by remember { mutableStateOf<(() -> Unit)?>(null) }
-
     val treeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { treeUri ->
@@ -166,31 +166,33 @@ fun TasksScreen(
         }
     }
 
-    val filteredTasks = visibleTasks.filter { task ->
-        val q = query.trim()
-        val matchesQuery =
-            q.isBlank() ||
-                task.name.contains(q, ignoreCase = true) ||
-                visibleTags.filter { task.tagIds.contains(it.id) }.any { it.name.contains(q, ignoreCase = true) }
+    val filteredTasks = remember(visibleTasks, query, selectedTagFilters, visibleTags) {
+        visibleTasks.filter { task ->
+            val q = query.trim()
+            val matchesQuery =
+                q.isBlank() ||
+                    task.name.contains(q, ignoreCase = true) ||
+                    visibleTags.filter { task.tagIds.contains(it.id) }
+                        .any { it.name.contains(q, ignoreCase = true) }
 
-        val matchesTags =
-            selectedTagFilters.isEmpty() ||
-                selectedTagFilters.all { task.tagIds.contains(it) }
+            val matchesTags =
+                selectedTagFilters.isEmpty() || selectedTagFilters.all { task.tagIds.contains(it) }
 
-        matchesQuery && matchesTags
+            matchesQuery && matchesTags
+        }
     }
 
-    // Requirements:
-    // - running tasks on top
-    // - among running: most recently started first
-    // - among not running: newest to oldest
+    // Running tasks on top; among running: most recently started first; among others: newest first.
     val orderedTasks = remember(filteredTasks) {
         filteredTasks.sortedWith(
-            compareByDescending<com.example.multitimetracker.model.Task> { it.isRunning }
+            compareByDescending<Task> { it.isRunning }
                 .thenByDescending { it.lastStartedAtMs ?: 0L }
                 .thenByDescending { it.id }
         )
     }
+
+    val runningTasks = remember(orderedTasks) { orderedTasks.filter { it.isRunning } }
+    val inactiveTasks = remember(orderedTasks) { orderedTasks.filter { !it.isRunning } }
 
     // Focus request coming from outside (e.g. widget).
     LaunchedEffect(externalFocusTaskId) {
@@ -206,17 +208,11 @@ fun TasksScreen(
 
     // When a new task is created, scroll to top and briefly highlight it.
     LaunchedEffect(state.tasks) {
-        val maxId = state.tasks
-            .asSequence()
-            .filter { !it.isDeleted }
-            .maxOfOrNull { it.id } ?: 0L
-
-        // First composition of this screen: initialize baseline without highlighting.
+        val maxId = state.tasks.asSequence().filter { !it.isDeleted }.maxOfOrNull { it.id } ?: 0L
         if (lastSeenMaxTaskId < 0L) {
             lastSeenMaxTaskId = maxId
             return@LaunchedEffect
         }
-
         if (maxId > lastSeenMaxTaskId) {
             lastSeenMaxTaskId = maxId
             highlightTaskId = maxId
@@ -234,6 +230,9 @@ fun TasksScreen(
             TopAppBar(
                 title = { Text("Tasks") },
                 actions = {
+                    IconButton(onClick = { showFilters = !showFilters }) {
+                        Icon(Icons.Filled.FilterList, contentDescription = "Filtri")
+                    }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Filled.Settings, contentDescription = "Settings")
                     }
@@ -241,7 +240,6 @@ fun TasksScreen(
                         Icon(Icons.Filled.Delete, contentDescription = "Trash")
                     }
                     IconButton(onClick = {
-                        // If backup folder not configured yet, ask once for a root folder.
                         if (BackupFolderStore.getTreeUri(context) == null) {
                             pendingAfterFolderPick = { onImport(context) }
                             treeLauncher.launch(null)
@@ -276,13 +274,32 @@ fun TasksScreen(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = {
-                        // Hide keyboard when the user taps outside inputs.
                         focusManager.clearFocus()
                         keyboardController?.hide()
                     })
                 },
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            if (showFilters) {
+                FilterPanel(
+                    query = query,
+                    onQueryChange = { query = it },
+                    tags = visibleTags,
+                    selectedTagIds = selectedTagFilters,
+                    tagColors = tagColors,
+                    onToggleTag = { id ->
+                        selectedTagFilters =
+                            if (selectedTagFilters.contains(id)) selectedTagFilters - id else selectedTagFilters + id
+                    },
+                    onClear = {
+                        query = ""
+                        selectedTagFilters = emptySet()
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                    }
+                )
+            }
+
             val activeCount = state.tasks.count { it.isRunning }
             Text(
                 text = "$activeCount task attivi",
@@ -290,9 +307,6 @@ fun TasksScreen(
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
 
-            // Active tasks: minimal, non-hierarchical panel.
-            val runningTasks = remember(orderedTasks) { orderedTasks.filter { it.isRunning } }
-            val inactiveTasks = remember(orderedTasks) { orderedTasks.filterNot { it.isRunning } }
             if (runningTasks.isNotEmpty()) {
                 ActiveTasksMinimalPanel(
                     tasks = runningTasks,
@@ -301,47 +315,6 @@ fun TasksScreen(
                     onLongPressTaskById = { openedTaskId = it },
                     onOpenLinkForTask = { link -> openLink(context, link) }
                 )
-            }
-
-            // Search
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Ricerca task o tag") },
-                singleLine = true,
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .fillMaxWidth()
-            )
-
-            // Tag filters
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (visibleTags.isEmpty()) {
-                    AssistChip(onClick = { }, label = { Text("Nessun tag") })
-                } else {
-                    visibleTags.forEach { tag ->
-                        val selected = selectedTagFilters.contains(tag.id)
-                        val base = tagColors[tag.id] ?: tagColorFromSeed(tag.name)
-                        val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                selectedTagFilters =
-                                    if (selected) selectedTagFilters - tag.id else selectedTagFilters + tag.id
-                            },
-                            label = { Text(tag.name) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                containerColor = bg,
-                                selectedContainerColor = bg
-                            )
-                        )
-                    }
-                }
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
@@ -353,106 +326,100 @@ fun TasksScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(inactiveTasks, key = { it.id }) { task ->
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            when (value) {
-                                SwipeToDismissBoxValue.StartToEnd -> {
-                                    // Swipe right -> edit
-                                    editingTaskId = task.id
-                                }
-                                SwipeToDismissBoxValue.EndToStart -> {
-                                    // Swipe left -> trash
-                                    // Smooth removal before moving to trash.
-                                    val id = task.id
-                                    val taskName = task.name
-                                    if (!removingTaskIds.contains(id)) {
-                                        removingTaskIds = removingTaskIds + id
-                                        scope.launch {
-                                            delay(600)
-                                            onDeleteTask(id)
-                                            Toast.makeText(context, "Task $taskName eliminato", Toast.LENGTH_SHORT).show()
-                                            removingTaskIds = removingTaskIds - id
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                when (value) {
+                                    SwipeToDismissBoxValue.StartToEnd -> {
+                                        editingTaskId = task.id
+                                    }
+                                    SwipeToDismissBoxValue.EndToStart -> {
+                                        val id = task.id
+                                        val taskName = task.name
+                                        if (!removingTaskIds.contains(id)) {
+                                            removingTaskIds = removingTaskIds + id
+                                            scope.launch {
+                                                delay(600)
+                                                onDeleteTask(id)
+                                                Toast.makeText(context, "Task $taskName eliminato", Toast.LENGTH_SHORT).show()
+                                                removingTaskIds = removingTaskIds - id
+                                            }
                                         }
                                     }
+                                    else -> Unit
                                 }
-                                else -> Unit
-                            }
-                            // Keep the item in-place; state changes will drive recomposition.
-                            false
-                        }
-                    )
-
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = !removingTaskIds.contains(task.id),
-                        enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
-                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
-                        exit = slideOutHorizontally(
-                            animationSpec = tween(600, easing = FastOutSlowInEasing),
-                            targetOffsetX = { -it }
-                        ) + fadeOut(animationSpec = tween(600, easing = FastOutSlowInEasing))
-                    ) {
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            backgroundContent = {
-                                val bgColor = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
-                                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
-                                    else -> Color.Transparent
-                                }
-                                val label = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.StartToEnd -> "Edit"
-                                    SwipeToDismissBoxValue.EndToStart -> "Delete"
-                                    else -> ""
-                                }
-                                val alignment = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                                    else -> Alignment.Center
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(bgColor),
-                                    contentAlignment = alignment
-                                ) {
-                                    if (label.isNotBlank()) {
-                                        Text(
-                                            text = label,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(horizontal = 14.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            content = {
-                            // Highlight the most recently created task.
-                            val highlightThis = highlightTaskId == task.id
-                            TaskRow(
-                                tagColors = tagColors,
-                                task = task,
-                                tags = visibleTags,
-                                nowMs = state.nowMs,
-                                highlightRunning = task.isRunning,
-                                highlightJustCreated = highlightThis,
-                                onToggle = {
-                                    onToggleTask(task.id)
-                                    scope.launch { listState.animateScrollToItem(0) }
-                                },
-                                onLongPress = { openedTaskId = task.id },
-                                linkText = if (task.link.isNotBlank()) "🔗" else "",
-                                onOpenLink = { openLink(context, task.link) }
-                            )
+                                false
                             }
                         )
+
+                        AnimatedVisibility(
+                            visible = !removingTaskIds.contains(task.id),
+                            enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                                fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+                            exit = slideOutHorizontally(
+                                animationSpec = tween(600, easing = FastOutSlowInEasing),
+                                targetOffsetX = { -it }
+                            ) + fadeOut(animationSpec = tween(600, easing = FastOutSlowInEasing))
+                        ) {
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    val bgColor = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
+                                        SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
+                                        else -> Color.Transparent
+                                    }
+                                    val label = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> "Edit"
+                                        SwipeToDismissBoxValue.EndToStart -> "Delete"
+                                        else -> ""
+                                    }
+                                    val alignment = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                        else -> Alignment.Center
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(bgColor),
+                                        contentAlignment = alignment
+                                    ) {
+                                        if (label.isNotBlank()) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(horizontal = 14.dp)
+                                            )
+                                        }
+                                    }
+                                },
+                                content = {
+                                    val highlightThis = highlightTaskId == task.id
+                                    TaskRow(
+                                        tagColors = tagColors,
+                                        task = task,
+                                        tags = visibleTags,
+                                        nowMs = state.nowMs,
+                                        highlightRunning = false,
+                                        highlightJustCreated = highlightThis,
+                                        showTime = !hideInactiveTime,
+                                        showTags = !hideInactiveTags,
+                                        onToggle = {
+                                            onToggleTask(task.id)
+                                            scope.launch { listState.animateScrollToItem(0) }
+                                        },
+                                        onLongPress = { openedTaskId = task.id },
+                                        linkText = if (task.link.isNotBlank()) "🔗" else "",
+                                        onOpenLink = { openLink(context, task.link) }
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
-                }
 
-                // Scroll-to-top button (only when not at the top)
-                val showScrollToTop by remember {
-                    derivedStateOf { listState.firstVisibleItemIndex > 0 }
-                }
+                val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
                 if (showScrollToTop) {
                     FloatingActionButton(
                         onClick = { scope.launch { listState.animateScrollToItem(0) } },
@@ -471,7 +438,7 @@ fun TasksScreen(
         }
     }
 
-    // Add task
+    // Add / Edit / History / Settings / Trash dialogs remain unchanged.
     if (showAdd) {
         AddTaskDialog(
             tags = visibleTags,
@@ -486,7 +453,6 @@ fun TasksScreen(
         )
     }
 
-    // Task history
     val openId = openedTaskId
     if (openId != null) {
         val task = state.tasks.firstOrNull { it.id == openId && !it.isDeleted }
@@ -504,7 +470,6 @@ fun TasksScreen(
         }
     }
 
-    // Settings (minimal stats).
     if (showSettings) {
         val intervals = ArrayList<Pair<Long, Long>>(state.taskSessions.size + state.tasks.size)
         state.taskSessions.forEach { s ->
@@ -512,14 +477,11 @@ fun TasksScreen(
             val en = s.endTs
             if (en > st) intervals.add(st to en)
         }
-        state.tasks
-            .asSequence()
-            .filter { it.isRunning && it.lastStartedAtMs != null }
-            .forEach { t ->
-                val st = t.lastStartedAtMs ?: state.nowMs
-                val en = state.nowMs
-                if (en > st) intervals.add(st to en)
-            }
+        state.tasks.asSequence().filter { it.isRunning && it.lastStartedAtMs != null }.forEach { t ->
+            val st = t.lastStartedAtMs ?: state.nowMs
+            val en = state.nowMs
+            if (en > st) intervals.add(st to en)
+        }
         val totalTracked = unionTotalMs(intervals)
 
         val tasksTotal = state.tasks.count { !it.isDeleted }
@@ -529,7 +491,7 @@ fun TasksScreen(
             onDismissRequest = { showSettings = false },
             title = { Text("Impostazioni") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked)}")
                     val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L)
@@ -537,25 +499,50 @@ fun TasksScreen(
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
 
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
+                    Text("Vista", style = MaterialTheme.typography.titleMedium)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Nascondi tempi nei task inattivi")
+                        Checkbox(
+                            checked = hideInactiveTime,
+                            onCheckedChange = { checked ->
+                                hideInactiveTime = checked
+                                UiPrefsStore.setHideInactiveTime(context, checked)
+                            }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Nascondi tag nei task inattivi")
+                        Checkbox(
+                            checked = hideInactiveTags,
+                            onCheckedChange = { checked ->
+                                hideInactiveTags = checked
+                                UiPrefsStore.setHideInactiveTags(context, checked)
+                            }
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
                     Text("Suggerimento", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Se per un periodo ti servono solo pochi task, puoi creare un tag ⭐ e tappare sul chip filtro ⭐ per vedere solo quelli."
-                    )
+                    Text("Se per un periodo ti servono solo pochi task, crea un tag ⭐ e usa il filtro ⭐.")
                 }
             },
-            confirmButton = {
-                Button(onClick = { showSettings = false }) { Text("Chiudi") }
-            }
+            confirmButton = { Button(onClick = { showSettings = false }) { Text("Chiudi") } }
         )
     }
 
-    // Trash (soft-deleted tasks)
     if (showTrash) {
-        val trashed = state.tasks
-            .filter { it.isDeleted }
-            .sortedByDescending { it.deletedAtMs ?: 0L }
-
+        val trashed = state.tasks.filter { it.isDeleted }.sortedByDescending { it.deletedAtMs ?: 0L }
         AlertDialog(
             onDismissRequest = { showTrash = false },
             title = { Text("Cestino (Tasks)") },
@@ -592,7 +579,6 @@ fun TasksScreen(
         )
     }
 
-    // Edit tags
     val editId = editingTaskId
     if (editId != null) {
         val task = state.tasks.firstOrNull { it.id == editId }
@@ -614,6 +600,68 @@ fun TasksScreen(
 }
 
 @Composable
+private fun FilterPanel(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    tags: List<Tag>,
+    selectedTagIds: Set<Long>,
+    tagColors: Map<Long, Color>,
+    onToggleTag: (Long) -> Unit,
+    onClear: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Filtri", style = MaterialTheme.typography.labelLarge)
+            Button(onClick = onClear) { Text("Reset") }
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            label = { Text("Ricerca task o tag") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (tags.isEmpty()) {
+                AssistChip(onClick = { }, label = { Text("Nessun tag") })
+            } else {
+                tags.forEach { tag ->
+                    val selected = selectedTagIds.contains(tag.id)
+                    val base = tagColors[tag.id] ?: tagColorFromSeed(tag.name)
+                    val bg = if (selected) base.copy(alpha = 0.55f) else base.copy(alpha = 0.28f)
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onToggleTag(tag.id) },
+                        label = { Text(tag.name) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = bg,
+                            selectedContainerColor = bg
+                        )
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+    }
+}
+
+@Composable
 private fun ActiveTasksMinimalPanel(
     tasks: List<Task>,
     nowMs: Long,
@@ -628,23 +676,23 @@ private fun ActiveTasksMinimalPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         tasks.forEach { task ->
             val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
-            val tagCount = task.tagIds.size
-
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .combinedClickable(
-                        onClick = { onToggleTaskById(task.id) },
-                        onLongClick = { onLongPressTaskById(task.id) }
-                    ),
+                    .pointerInput(task.id) {
+                        detectTapGestures(
+                            onTap = { onToggleTaskById(task.id) },
+                            onLongPress = { onLongPressTaskById(task.id) }
+                        )
+                    },
                 color = runningBg,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                shape = MaterialTheme.shapes.large
+                shape = MaterialTheme.shapes.medium
             ) {
                 Row(
                     modifier = Modifier
@@ -653,53 +701,43 @@ private fun ActiveTasksMinimalPanel(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = task.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatDuration(shownMs),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                            maxLines = 1
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = task.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (task.link.isNotBlank()) Text("🔗")
+                        }
+                        val tagCount = task.tagIds.size
                         if (tagCount > 0) {
                             Text(
                                 text = "#$tagCount",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                        if (task.link.isNotBlank()) {
-                            Text(
-                                text = "🔗",
-                                modifier = Modifier
-                                    .combinedClickable(
-                                        onClick = { onOpenLinkForTask(task.link) },
-                                        onLongClick = { onOpenLinkForTask(task.link) }
-                                    )
-                                    .padding(4.dp)
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
+
+                    Text(
+                        text = formatDuration(shownMs),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
                 }
             }
         }
     }
 }
+
+/* === Below: existing dialogs + helpers from the original file === */
 
 @Composable
 private fun TaskHistoryDialog(
@@ -751,12 +789,11 @@ private fun TaskHistoryDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.heightIn(max = 420.dp)
                 ) {
-                    // Running session (pinned on top)
                     if (isRunning && runningStartTs != null) {
                         val d = dayOf(runningStartTs)
-                        item(key = "running_header_${d}") {
+                        item(key = "running_header_${'$'}{d}") {
                             Text(
-                                text = "📅 ${d.format(dayFmt)}",
+                                text = "📅 ${'$'}{d.format(dayFmt)}",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -766,62 +803,39 @@ private fun TaskHistoryDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text(timeOf(runningStartTs))
-                                    Text("→")
-                                    Text("ora")
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
-                                ) {
+                                    Text("▶️ running", style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        text = "Durata: ${formatDuration(runningDur)}  •  IN CORSO",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                        text = formatDuration(engine.displayMs(0L, runningStartTs, nowMs)),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontFamily = FontFamily.Monospace
                                     )
                                 }
-                            }
-                        }
-                        item { HorizontalDivider() }
-                    }
-
-                    if (ordered.isEmpty()) {
-                        item {
-                            Text("Nessuna sessione salvata (avvia e ferma almeno una volta).")
-                        }
-                    } else {
-                        for (day in days) {
-                            val list = grouped[day].orEmpty()
-                            item(key = "day_${day}") {
                                 Text(
-                                    text = "📅 ${day.format(dayFmt)}",
-                                    style = MaterialTheme.typography.labelLarge
+                                    text = "da ${'$'}{timeOf(runningStartTs)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            items(list, key = { it.startTs }) { s ->
-                                val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(timeOf(s.startTs))
-                                        Text("→")
-                                        Text(timeOf(s.endTs))
-                                    }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
-                                    ) {
-                                        Text(
-                                            text = "Durata: ${formatDuration(dur)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                        )
-                                    }
-                                }
+                        }
+                    }
+
+                    days.forEach { day ->
+                        val list = grouped[day].orEmpty()
+                        item(key = "day_${'$'}{day}") {
+                            Text(
+                                text = "📅 ${'$'}{day.format(dayFmt)}",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                        items(list, key = { it.id }) { s ->
+                            val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${'$'}{timeOf(s.startTs)} → ${'$'}{timeOf(s.endTs)}", style = MaterialTheme.typography.bodySmall)
+                                Text(formatDuration(dur), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                             }
-                            item { HorizontalDivider() }
                         }
                     }
                 }
@@ -839,8 +853,8 @@ private fun AddTaskDialog(
     onConfirm: (String, Set<Long>, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var newTag by remember { mutableStateOf("") }
     var link by remember { mutableStateOf("") }
-    var newTagName by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
 
     val focusManager = LocalFocusManager.current
@@ -867,13 +881,33 @@ private fun AddTaskDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text("Tag")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newTag,
+                        onValueChange = { newTag = it },
+                        label = { Text("Nuovo tag") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(onClick = {
+                        val t = newTag.trim()
+                        if (t.isNotBlank()) {
+                            onAddTag(t)
+                            newTag = ""
+                        }
+                    }) { Text("+") }
+                }
+
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 260.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(tags, key = { it.id }) { tag ->
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(tag.name)
                             Checkbox(
                                 checked = selected.contains(tag.id),
@@ -883,28 +917,6 @@ private fun AddTaskDialog(
                             )
                         }
                     }
-                }
-
-Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = newTagName,
-                        onValueChange = { newTagName = it },
-                        label = { Text("Nuovo tag") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(
-                        onClick = {
-                            val t = newTagName.trim()
-                            if (t.isNotEmpty()) {
-                                onAddTag(t)
-                                newTagName = ""
-                                // After adding a tag, keep the UI clean.
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                            }
-                        }
-                    ) { Text("Aggiungi") }
                 }
             }
         },
@@ -986,19 +998,15 @@ private fun EditTaskDialog(
                 )
             }
         },
-        confirmButton = {
-            Button(onClick = { onConfirm(name, selected, link) }) { Text("Salva") }
-        },
-        dismissButton = {
-            Button(onClick = onDismiss) { Text("Chiudi") }
-        }
+        confirmButton = { Button(onClick = { onConfirm(name, selected, link) }) { Text("Salva") } },
+        dismissButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
     )
 }
 
 private fun openLink(context: Context, raw: String) {
     val trimmed = raw.trim()
     if (trimmed.isEmpty()) return
-    val url = if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) trimmed else "https://$trimmed"
+    val url = if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) trimmed else "https://${'$'}trimmed"
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
