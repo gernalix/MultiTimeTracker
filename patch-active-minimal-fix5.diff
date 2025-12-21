@@ -1,0 +1,12 @@
+diff --git a/app/src/main/java/com/example/multitimetracker/ui/screens/TasksScreen.kt b/app/src/main/java/com/example/multitimetracker/ui/screens/TasksScreen.kt
+index 0000000..0000000 100644
+--- a/app/src/main/java/com/example/multitimetracker/ui/screens/TasksScreen.kt
++++ b/app/src/main/java/com/example/multitimetracker/ui/screens/TasksScreen.kt
+@@
+-package com.example.multitimetracker.ui.screens
++@file:OptIn(
++    androidx.compose.material3.ExperimentalMaterial3Api::class,
++    androidx.compose.foundation.ExperimentalFoundationApi::class
++)
++
++package com.example.multitimetracker.ui.screens

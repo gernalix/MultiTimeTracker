@@ -1,5 +1,8 @@
-// v29
+// v34
 package com.example.multitimetracker.ui.screens
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.derivedStateOf
@@ -77,9 +80,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.BackupFolderStore
 import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.model.Task
 import com.example.multitimetracker.model.TimeEngine
 import com.example.multitimetracker.model.UiState
 import com.example.multitimetracker.ui.components.TaskRow
@@ -91,7 +97,6 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(
     modifier: Modifier,
@@ -285,6 +290,19 @@ fun TasksScreen(
                 modifier = Modifier.padding(horizontal = 12.dp)
             )
 
+            // Active tasks: minimal, non-hierarchical panel.
+            val runningTasks = remember(orderedTasks) { orderedTasks.filter { it.isRunning } }
+            val inactiveTasks = remember(orderedTasks) { orderedTasks.filterNot { it.isRunning } }
+            if (runningTasks.isNotEmpty()) {
+                ActiveTasksMinimalPanel(
+                    tasks = runningTasks,
+                    nowMs = state.nowMs,
+                    onToggleTaskById = onToggleTask,
+                    onLongPressTaskById = { openedTaskId = it },
+                    onOpenLinkForTask = { link -> openLink(context, link) }
+                )
+            }
+
             // Search
             OutlinedTextField(
                 value = query,
@@ -334,7 +352,7 @@ fun TasksScreen(
                         .fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(orderedTasks, key = { it.id }) { task ->
+                    items(inactiveTasks, key = { it.id }) { task ->
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { value ->
                             when (value) {
@@ -591,6 +609,94 @@ fun TasksScreen(
                     editingTaskId = null
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ActiveTasksMinimalPanel(
+    tasks: List<Task>,
+    nowMs: Long,
+    onToggleTaskById: (Long) -> Unit,
+    onLongPressTaskById: (Long) -> Unit,
+    onOpenLinkForTask: (String) -> Unit
+) {
+    val engine = remember { TimeEngine() }
+    val runningBg = remember { Color(0xFFCCFFCC) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        tasks.forEach { task ->
+            val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
+            val tagCount = task.tagIds.size
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { onToggleTaskById(task.id) },
+                        onLongClick = { onLongPressTaskById(task.id) }
+                    ),
+                color = runningBg,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                shape = MaterialTheme.shapes.large
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = task.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = formatDuration(shownMs),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (tagCount > 0) {
+                            Text(
+                                text = "#$tagCount",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                        if (task.link.isNotBlank()) {
+                            Text(
+                                text = "🔗",
+                                modifier = Modifier
+                                    .combinedClickable(
+                                        onClick = { onOpenLinkForTask(task.link) },
+                                        onLongClick = { onOpenLinkForTask(task.link) }
+                                    )
+                                    .padding(4.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -898,7 +1004,6 @@ private fun openLink(context: Context, raw: String) {
         context.startActivity(intent)
     }
 }
-
 
 private fun formatDuration(ms: Long): String {
     val totalSec = ms / 1000
