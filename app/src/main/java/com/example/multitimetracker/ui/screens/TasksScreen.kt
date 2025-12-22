@@ -1,7 +1,8 @@
 // v37
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.ExperimentalFoundationApi::class
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
 )
 package com.example.multitimetracker.ui.screens
 
@@ -112,6 +113,8 @@ fun TasksScreen(
     onExport: (Context) -> Unit,
     onImport: (Context) -> Unit,
     onSetBackupRootFolder: (Context, Uri) -> Unit,
+    showSeconds: Boolean,
+    onShowSecondsChange: (Boolean) -> Unit,
     externalFocusTaskId: Long? = null,
     onExternalFocusConsumed: () -> Unit = {}
 ) {
@@ -135,7 +138,6 @@ fun TasksScreen(
     // View prefs for inactive tasks (persisted).
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
-    var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -199,12 +201,11 @@ fun TasksScreen(
 
     // Focus request coming from outside (e.g. widget).
     LaunchedEffect(externalFocusTaskId) {
-        val id = externalFocusTaskId
-        if (id != null) {
-            highlightTaskId = id
+        if (externalFocusTaskId != null) {
+            highlightTaskId = externalFocusTaskId
             runCatching { listState.animateScrollToItem(0) }
             delay(2000)
-            if (highlightTaskId == id) highlightTaskId = null
+            if (highlightTaskId == externalFocusTaskId) highlightTaskId = null
             onExternalFocusConsumed()
         }
     }
@@ -318,8 +319,7 @@ fun TasksScreen(
                     showSeconds = showSeconds,
                     nowMs = state.nowMs,
                     onToggleTaskById = onToggleTask,
-                    onLongPressTaskById = { openedTaskId = it },
-                    onOpenLinkForTask = { link -> openLink(context, link) }
+                    onLongPressTaskById = { openedTaskId = it }
                 )
             }
 
@@ -470,6 +470,7 @@ fun TasksScreen(
                 runningStartTs = task.lastStartedAtMs,
                 nowMs = state.nowMs,
                 sessions = state.taskSessions.filter { it.taskId == openId },
+                showSeconds = showSeconds,
                 onDismiss = { openedTaskId = null }
             )
         } else {
@@ -548,10 +549,7 @@ fun TasksScreen(
                         Text("Mostra secondi")
                         Checkbox(
                             checked = showSeconds,
-                            onCheckedChange = { checked ->
-                                showSeconds = checked
-                                UiPrefsStore.setShowSeconds(context, checked)
-                            }
+                            onCheckedChange = onShowSecondsChange
                         )
                     }
                     Spacer(Modifier.height(4.dp))
@@ -591,7 +589,7 @@ fun TasksScreen(
                                         Button(onClick = { onRestoreTask(t.id) }) { Text("Ripristina") }
                                         Button(onClick = { onPurgeTask(t.id) }) { Text("Elimina") }
                                     }
-                                }
+                                 }
                             }
                         }
                     }
@@ -606,7 +604,6 @@ fun TasksScreen(
         val task = state.tasks.firstOrNull { it.id == editId }
         if (task != null) {
             EditTaskDialog(
-                title = "Modifica task",
                 tags = visibleTags,
                 initialName = task.name,
                 initialSelection = task.tagIds,
@@ -691,8 +688,7 @@ private fun ActiveTasksMinimalPanel(
     showSeconds: Boolean,
     nowMs: Long,
     onToggleTaskById: (Long) -> Unit,
-    onLongPressTaskById: (Long) -> Unit,
-    onOpenLinkForTask: (String) -> Unit
+    onLongPressTaskById: (Long) -> Unit
 ) {
     val engine = remember { TimeEngine() }
     val runningBg = remember { Color(0xFFCCFFCC) }
@@ -781,6 +777,7 @@ private fun TaskHistoryDialog(
     runningStartTs: Long?,
     nowMs: Long,
     sessions: List<TaskSession>,
+    showSeconds: Boolean,
     onDismiss: () -> Unit
 ) {
     val engine = remember { TimeEngine() }
@@ -826,9 +823,9 @@ private fun TaskHistoryDialog(
                 ) {
                     if (isRunning && runningStartTs != null) {
                         val d = dayOf(runningStartTs)
-                        item(key = "running_header_${'$'}{d}") {
+                        item(key = "running_header_${d}") {
                             Text(
-                                text = "📅 ${'$'}{d.format(dayFmt)}",
+                                text = "📅 ${d.format(dayFmt)}",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -840,13 +837,13 @@ private fun TaskHistoryDialog(
                                 ) {
                                     Text("▶️ running", style = MaterialTheme.typography.bodyMedium)
                                     Text(
-                                        text = formatDuration(engine.displayMs(0L, runningStartTs, nowMs)),
+                                        text = formatDuration(engine.displayMs(0L, runningStartTs, nowMs), showSeconds),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
                                 Text(
-                                    text = "da ${'$'}{timeOf(runningStartTs)}",
+                                    text = "da ${timeOf(runningStartTs)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -856,9 +853,9 @@ private fun TaskHistoryDialog(
 
                     days.forEach { day ->
                         val list = grouped[day].orEmpty()
-                        item(key = "day_${'$'}{day}") {
+                        item(key = "day_${day}") {
                             Text(
-                                text = "📅 ${'$'}{day.format(dayFmt)}",
+                                text = "📅 ${day.format(dayFmt)}",
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
@@ -868,7 +865,7 @@ private fun TaskHistoryDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("${'$'}{timeOf(s.startTs)} → ${'$'}{timeOf(s.endTs)}", style = MaterialTheme.typography.bodySmall)
+                                Text("${timeOf(s.startTs)} → ${timeOf(s.endTs)}", style = MaterialTheme.typography.bodySmall)
                                 Text(formatDuration(dur, showSeconds), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                             }
                         }
@@ -889,7 +886,7 @@ private fun AddTaskDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var newTag by remember { mutableStateOf("") }
-    var link by remember { mutableStateOf("") }
+    var link by remember { mutableState of("") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
 
     val focusManager = LocalFocusManager.current
@@ -974,7 +971,6 @@ private fun AddTaskDialog(
 
 @Composable
 private fun EditTaskDialog(
-    title: String,
     tags: List<Tag>,
     initialName: String,
     initialSelection: Set<Long>,
@@ -988,7 +984,7 @@ private fun EditTaskDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text("Modifica task") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -1062,14 +1058,14 @@ private fun CompactTagChip(
 private fun openLink(context: Context, raw: String) {
     val trimmed = raw.trim()
     if (trimmed.isEmpty()) return
-    val url = if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) trimmed else "https://${'$'}trimmed"
+    val url = if (trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true)) trimmed else "https://${trimmed}"
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
 }
 
-private fun formatDuration(ms: Long, showSeconds: Boolean): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean = true): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
