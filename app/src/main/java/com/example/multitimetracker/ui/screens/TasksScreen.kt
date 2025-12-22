@@ -1,4 +1,4 @@
-// v39
+// v41
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -129,6 +129,9 @@ fun TasksScreen(
 
     var showAdd by remember { mutableStateOf(false) }
     var editingTaskId by remember { mutableStateOf<Long?>(null) }
+    var deletingTaskId by remember { mutableStateOf<Long?>(null) }
+    var deletingTaskName by remember { mutableStateOf<String?>(null) }
+    var showDeleteTaskConfirm by remember { mutableStateOf(false) }
     var showTrash by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var openedTaskId by remember { mutableStateOf<Long?>(null) }
@@ -307,13 +310,7 @@ fun TasksScreen(
                 )
             }
 
-            val activeCount = state.tasks.count { it.isRunning }
-            Text(
-                text = "$activeCount task attivi",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
-
+            
             if (runningTasks.isNotEmpty()) {
                 ActiveTasksMinimalPanel(
                     tasks = runningTasks,
@@ -334,7 +331,114 @@ fun TasksScreen(
                         .fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(inactiveTasks, key = { it.id }) { task ->
+                    
+                    item(key = "header_active") {
+                        Text(
+                            text = "Task attivi",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+
+                    if (runningTasks.isEmpty()) {
+                        item(key = "no_active") {
+                            Text(
+                                text = "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                        }
+                    } else {
+                        items(runningTasks, key = { it.id }) { task ->
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    when (value) {
+                                        SwipeToDismissBoxValue.StartToEnd -> {
+                                            editingTaskId = task.id
+                                        }
+                                        SwipeToDismissBoxValue.EndToStart -> {
+                                            val id = task.id
+                                            val taskName = task.name
+                                            deletingTaskId = id
+                                            deletingTaskName = taskName
+                                            showDeleteTaskConfirm = true
+                                        }
+                                        else -> Unit
+                                    }
+                                    false
+                                }
+                            )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    val bg = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
+                                        SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
+                                        else -> Color.Transparent
+                                    }
+                                    val label = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> "Edit"
+                                        SwipeToDismissBoxValue.EndToStart -> "Delete"
+                                        else -> ""
+                                    }
+                                    val alignment = when (dismissState.dismissDirection) {
+                                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                        else -> Alignment.Center
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(bg)
+                                            .padding(vertical = 2.dp),
+                                        contentAlignment = alignment
+                                    ) {
+                                        if (label.isNotBlank()) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(horizontal = 14.dp)
+                                            )
+                                        }
+                                    }
+                                },
+                                content = {
+                                    val highlightThis = highlightTaskId == task.id
+                                    TaskRow(
+                                        tagColors = tagColors,
+                                        task = task,
+                                        tags = visibleTags,
+                                        nowMs = state.nowMs,
+                                        highlightRunning = false,
+                                        highlightJustCreated = highlightThis,
+                                        showTime = !hideInactiveTime,
+                                        showTags = !hideInactiveTags,
+                                        showSeconds = showSeconds,
+                                        onToggle = {
+                                            val wasRunning = task.isRunning
+                                            onToggleTask(task.id)
+                                            if (wasRunning) scope.launch { listState.animateScrollToItem(0) }
+                                        },
+                                        onLongPress = { openedTaskId = task.id },
+                                        linkText = if (task.link.isNotBlank()) "🔗" else "",
+                                        onOpenLink = { openLink(context, task.link) }
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    item(key = "header_inactive") {
+                        Text(
+                            text = "Task inattivi",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
+                        )
+                    }
+
+items(inactiveTasks, key = { it.id }) { task ->
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
                                 when (value) {
@@ -416,8 +520,9 @@ fun TasksScreen(
                                         showTags = !hideInactiveTags,
                                         showSeconds = showSeconds,
                                         onToggle = {
+                                            val wasRunning = task.isRunning
                                             onToggleTask(task.id)
-                                            scope.launch { listState.animateScrollToItem(0) }
+                                            if (wasRunning) scope.launch { listState.animateScrollToItem(0) }
                                         },
                                         onLongPress = { openedTaskId = task.id },
                                         linkText = if (task.link.isNotBlank()) "🔗" else "",
@@ -505,7 +610,10 @@ fun TasksScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds)}")
-                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L)
+                    val sinceInstallMs = (localNowMs - state.installAtMs).coerceAtLeast(0L)
+                    val trackedPct = if (sinceInstallMs > 0L) (totalTracked.toDouble() / sinceInstallMs.toDouble()) * 100.0 else 0.0
+                    Text("% tempo tracciato: ${"%.1f".format(trackedPct)}%")
+                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L).coerceAtLeast(0L) } ?: 0L)
                     Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
@@ -564,7 +672,32 @@ fun TasksScreen(
         )
     }
 
-    if (showTrash) {
+    
+    if (showDeleteTaskConfirm && deletingTaskId != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteTaskConfirm = false },
+            title = { Text("Eliminare task?") },
+            text = { Text(deletingTaskName ?: "") },
+            confirmButton = {
+                Button(onClick = {
+                    val id = deletingTaskId!!
+                    showDeleteTaskConfirm = false
+                    deletingTaskId = null
+                    deletingTaskName = null
+                    onDeleteTask(id)
+                }) { Text("Elimina") }
+            },
+            dismissButton = {
+                Button(onClick = {
+                    showDeleteTaskConfirm = false
+                    deletingTaskId = null
+                    deletingTaskName = null
+                }) { Text("Annulla") }
+            }
+        )
+    }
+
+if (showTrash) {
         val trashed = state.tasks.filter { it.isDeleted }.sortedByDescending { it.deletedAtMs ?: 0L }
         AlertDialog(
             onDismissRequest = { showTrash = false },

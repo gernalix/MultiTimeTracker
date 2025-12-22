@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.widget
 
 import android.content.Context
@@ -42,6 +42,7 @@ object QuickTaskRunner {
         val snapshot = SnapshotStore.load(context)
 
         val appUsageMs = snapshot?.appUsageMs ?: 0L
+        val installAtMs = snapshot?.installAtMs ?: System.currentTimeMillis()
 
         val engine = TimeEngine()
         val tasks = snapshot?.tasks ?: emptyList()
@@ -83,6 +84,7 @@ object QuickTaskRunner {
             tags = result.tags,
             taskSessions = engine.getTaskSessions(),
             tagSessions = engine.getTagSessions(),
+            installAtMs = installAtMs,
             appUsageMs = appUsageMs,
             activeTaskStart = runtime2.activeTaskStart,
             activeTagStart = runtime2.activeTagStart.map { (taskId, tagId, startTs) ->

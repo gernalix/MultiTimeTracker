@@ -1,4 +1,4 @@
-// v23
+// v25
 package com.example.multitimetracker
 
 import android.content.Context
@@ -59,6 +59,7 @@ class MainViewModel : ViewModel() {
             taskSessions = emptyList(),
             tagSessions = emptyList(),
             appUsageMs = 0L,
+            installAtMs = System.currentTimeMillis(),
             nowMs = System.currentTimeMillis()
         )
     )
@@ -119,6 +120,7 @@ class MainViewModel : ViewModel() {
                     tagSessions = snap.tagSessions,
                     appUsageMs = snap.appUsageMs,
                     appUsageRunningSinceMs = null,
+                    installAtMs = snap.installAtMs,
                     nowMs = System.currentTimeMillis()
                 )
             }
@@ -169,7 +171,8 @@ fun reloadFromSnapshot(context: Context) {
             tagSessions = snap.tagSessions,
             appUsageMs = snap.appUsageMs,
                     appUsageRunningSinceMs = null,
-            nowMs = System.currentTimeMillis()
+                installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
+                            nowMs = System.currentTimeMillis()
         )
     }
 
@@ -279,6 +282,7 @@ fun reloadFromSnapshot(context: Context) {
             tags = cur.tags,
             taskSessions = cur.taskSessions,
             tagSessions = cur.tagSessions,
+            installAtMs = cur.installAtMs,
             appUsageMs = cur.appUsageMs,
             activeTaskStart = runtime.activeTaskStart,
             activeTagStart = runtime.activeTagStart.map { (taskId, tagId, startTs) ->
@@ -406,6 +410,11 @@ fun reloadFromSnapshot(context: Context) {
         val dir = BackupFolderStore.getOrCreateDataDir(context)
         Log.i(LOG_TAG, "importBackupBlocking: reading from dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
         val snapshot = CsvImporter.importFromBackupFolder(context, dir)
+        val earliestImportedMs: Long? = run {
+            val a = snapshot.taskSessions.minOfOrNull { it.startTs }
+            val b = snapshot.tagSessions.minOfOrNull { it.startTs }
+            listOfNotNull(a, b).minOrNull()
+        }
         Log.i(
             LOG_TAG,
             "importBackupBlocking: parsed snapshot tasks=${snapshot.tasks.size} tags=${snapshot.tags.size} " +
@@ -429,6 +438,7 @@ fun reloadFromSnapshot(context: Context) {
                 taskSessions = snapshot.taskSessions,
                 tagSessions = snapshot.tagSessions,
                 appUsageMs = snapshot.appUsageMs,
+                        installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
                 appUsageRunningSinceMs = null,
                 nowMs = System.currentTimeMillis()
             )
@@ -704,6 +714,12 @@ fun exportCsv(context: Context) {
 
                 Log.i(LOG_TAG, "importCsv: engine loaded snapshot")
 
+                val earliestImportedMs = run {
+                    val earliestTask = snapshot.taskSessions.minOfOrNull { it.startTs }
+                    val earliestTag = snapshot.tagSessions.minOfOrNull { it.startTs }
+                    listOfNotNull(earliestTask, earliestTag).minOrNull()
+                }
+
                 _state.update {
                     it.copy(
                         tasks = snapshot.tasks,
@@ -711,6 +727,7 @@ fun exportCsv(context: Context) {
                         taskSessions = snapshot.taskSessions,
                         tagSessions = snapshot.tagSessions,
                         appUsageMs = snapshot.appUsageMs,
+                        installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
                         appUsageRunningSinceMs = null,
                         nowMs = System.currentTimeMillis()
                     )

@@ -1,4 +1,4 @@
-// v6
+// v7
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -25,6 +25,7 @@ object SnapshotStore {
         val tags: List<Tag>,
         val taskSessions: List<TaskSession>,
         val tagSessions: List<TagSession>,
+        val installAtMs: Long,
         val appUsageMs: Long,
         val activeTaskStart: Map<Long, Long>,
         val activeTagStart: List<ActiveTag>
@@ -42,11 +43,14 @@ object SnapshotStore {
         tags: List<Tag>,
         taskSessions: List<TaskSession>,
         tagSessions: List<TagSession>,
+        installAtMs: Long,
         appUsageMs: Long,
         activeTaskStart: Map<Long, Long>,
         activeTagStart: List<ActiveTag>
     ) {
         val root = JSONObject()
+
+        root.put("installAtMs", installAtMs)
 
         root.put("appUsageMs", appUsageMs)
 
@@ -144,6 +148,17 @@ object SnapshotStore {
         val taskSessions = root.getJSONArray("taskSessions").toTaskSessions()
         val tagSessions = root.getJSONArray("tagSessions").toTagSessions()
 
+        val installAtMs = run {
+            val raw = root.optLong("installAtMs", -1L)
+            if (raw > 0L) raw
+            else {
+                // Backward-compat: derive from earliest tracked session if present, otherwise 'now'.
+                val earliestTask = taskSessions.minOfOrNull { it.startTs }
+                val earliestTag = tagSessions.minOfOrNull { it.startTs }
+                listOfNotNull(earliestTask, earliestTag).minOrNull() ?: System.currentTimeMillis()
+            }
+        }
+
         val appUsageMs = root.optLong("appUsageMs", 0L)
 
         val activeTaskStart = mutableMapOf<Long, Long>()
@@ -173,6 +188,7 @@ object SnapshotStore {
             tags = tags,
             taskSessions = taskSessions,
             tagSessions = tagSessions,
+            installAtMs = installAtMs,
             appUsageMs = appUsageMs,
             activeTaskStart = activeTaskStart.toMap(),
             activeTagStart = activeTagStart.toList()

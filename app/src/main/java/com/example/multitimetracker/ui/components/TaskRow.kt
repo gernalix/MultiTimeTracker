@@ -1,4 +1,4 @@
-// v21
+// v22
 @file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
@@ -107,7 +107,7 @@ fun TaskRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val statusEmoji = if (task.isRunning) "▶️" else "⏸️"
+                    val statusEmoji = if (task.isRunning) "▶️" else ""
                     Text(
                         text = statusEmoji,
                         style = MaterialTheme.typography.bodySmall,

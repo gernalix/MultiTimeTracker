@@ -1,4 +1,4 @@
-// v18
+// v19
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -157,6 +158,11 @@ fun TagsScreen(
         }
 
         val listState = rememberLazyListState()
+
+    LaunchedEffect(Unit) {
+        // When entering the screen, always start from the top.
+        listState.scrollToItem(0)
+    }
 
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(

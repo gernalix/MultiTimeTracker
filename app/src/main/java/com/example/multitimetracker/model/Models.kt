@@ -1,4 +1,4 @@
-// v8
+// v10
 package com.example.multitimetracker.model
 import com.example.multitimetracker.export.TaskSession
 import com.example.multitimetracker.export.TagSession
@@ -41,5 +41,7 @@ data class UiState(
     /** When non-null, the app is currently in foreground and this is the start timestamp. */
     val appUsageRunningSinceMs: Long? = null,
     val activeTagStart: Map<Long, Long> = emptyMap(),
+    /** Timestamp of app install (or fallback: first tracked data). */
+    val installAtMs: Long,
     val nowMs: Long
 )
