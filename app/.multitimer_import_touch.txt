@@ -1,1 +1,1 @@
-2025-12-22 22:10:03 | progetto importato | v3 | zip=multitimer_v3 (1).zip | prefix=MultiTimeTracker-master/app/ | copied=3 | build=failed_exit_9009
+2025-12-22 22:40:22 | progetto importato | v5 | zip=multitimer_v5.zip | prefix=app/ | copied=55 | build=failed_exit_9009

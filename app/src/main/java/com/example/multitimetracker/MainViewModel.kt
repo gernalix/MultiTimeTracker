@@ -171,7 +171,7 @@ fun reloadFromSnapshot(context: Context) {
             tagSessions = snap.tagSessions,
             appUsageMs = snap.appUsageMs,
                     appUsageRunningSinceMs = null,
-                installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
+                installAtMs = minOf(it.installAtMs, snap.installAtMs),
                             nowMs = System.currentTimeMillis()
         )
     }
@@ -179,7 +179,6 @@ fun reloadFromSnapshot(context: Context) {
     // Keep auto-backup scheduled after external changes.
     scheduleAutoBackup()
 }
-
 
     data class BackupProbeResult(
         val hasValidFullSet: Boolean,
@@ -311,7 +310,6 @@ fun reloadFromSnapshot(context: Context) {
         return "${ts.size}|${tgs.size}|$lastTask|$lastTag|$tasksSig|$tagsSig|${_state.value.appUsageMs}"
     }
 
-
     private fun scheduleAutoBackup() {
         val ctx = appContext ?: return
         // Auto-backup only if the user has configured a tree URI.
@@ -410,10 +408,7 @@ fun reloadFromSnapshot(context: Context) {
         val dir = BackupFolderStore.getOrCreateDataDir(context)
         Log.i(LOG_TAG, "importBackupBlocking: reading from dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
         val snapshot = CsvImporter.importFromBackupFolder(context, dir)
-        val earliestImportedMs: Long? = run {
-            val a = snapshot.taskSessions.minOfOrNull { it.startTs }
-            val b = snapshot.tagSessions.minOfOrNull { it.startTs }
-            listOfNotNull(a, b).minOrNull()
+
         }
         Log.i(
             LOG_TAG,
@@ -438,7 +433,7 @@ fun reloadFromSnapshot(context: Context) {
                 taskSessions = snapshot.taskSessions,
                 tagSessions = snapshot.tagSessions,
                 appUsageMs = snapshot.appUsageMs,
-                        installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
+                        installAtMs = minOf(it.installAtMs, snapshot.installAtMs),
                 appUsageRunningSinceMs = null,
                 nowMs = System.currentTimeMillis()
             )
@@ -528,7 +523,6 @@ fun reloadFromSnapshot(context: Context) {
         scheduleAutoBackup()
     }
 
-
     fun updateTask(taskId: Long, newName: String, newTagIds: Set<Long>, link: String) {
         _state.update { current ->
             val now = System.currentTimeMillis()
@@ -553,8 +547,6 @@ fun reloadFromSnapshot(context: Context) {
         persist()
         scheduleAutoBackup()
     }
-
-    
 
     fun deleteTask(taskId: Long) {
         _state.update { current ->
@@ -583,7 +575,6 @@ fun reloadFromSnapshot(context: Context) {
         val curName = _state.value.tasks.firstOrNull { it.id == taskId }?.name ?: ""
         updateTask(taskId = taskId, newName = curName, newTagIds = newTagIds, link = link)
     }
-
 
     fun deleteTag(tagId: Long, deleteAssociatedTasks: Boolean = false) {
         _state.update { current ->
@@ -714,7 +705,6 @@ fun exportCsv(context: Context) {
 
                 Log.i(LOG_TAG, "importCsv: engine loaded snapshot")
 
-                val earliestImportedMs = run {
                     val earliestTask = snapshot.taskSessions.minOfOrNull { it.startTs }
                     val earliestTag = snapshot.tagSessions.minOfOrNull { it.startTs }
                     listOfNotNull(earliestTask, earliestTag).minOrNull()
@@ -727,7 +717,7 @@ fun exportCsv(context: Context) {
                         taskSessions = snapshot.taskSessions,
                         tagSessions = snapshot.tagSessions,
                         appUsageMs = snapshot.appUsageMs,
-                        installAtMs = minOf(it.installAtMs, earliestImportedMs ?: it.installAtMs),
+                        installAtMs = minOf(it.installAtMs, snapshot.installAtMs),
                         appUsageRunningSinceMs = null,
                         nowMs = System.currentTimeMillis()
                     )

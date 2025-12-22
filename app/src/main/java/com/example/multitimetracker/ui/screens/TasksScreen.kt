@@ -587,11 +587,10 @@ items(inactiveTasks, key = { it.id }) { task ->
     }
 
     if (showSettings) {
-        val intervals = ArrayList<Pair<Long, Long>>(state.taskSessions.size + state.tasks.size)
-        state.taskSessions.forEach { s ->
-            val st = s.startTs
-            val en = s.endTs
-            if (en > st) intervals.add(st to en)
+        // Recompute stats shown inside dialog.
+        val intervals = mutableListOf<Pair<Long, Long>>()
+        state.taskSessions.asSequence().filter { !it.isDeleted }.forEach { s ->
+            if (s.endTs > s.startTs) intervals.add(s.startTs to s.endTs)
         }
         state.tasks.asSequence().filter { it.isRunning && it.lastStartedAtMs != null }.forEach { t ->
             val st = t.lastStartedAtMs ?: state.nowMs
@@ -603,17 +602,21 @@ items(inactiveTasks, key = { it.id }) { task ->
         val tasksTotal = state.tasks.count { !it.isDeleted }
         val tagsTotal = state.tags.count { !it.isDeleted }
 
+        val sinceInstallMs = (localNowMs - state.installAtMs).coerceAtLeast(0L)
+        val trackedPct = if (sinceInstallMs > 0L) (totalTracked.toDouble() / sinceInstallMs.toDouble()) * 100.0 else 0.0
+        val appUsageShown = (state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L)).coerceAtLeast(0L)
+
         AlertDialog(
             onDismissRequest = { showSettings = false },
             title = { Text("Impostazioni") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds)}")
-                    val sinceInstallMs = (localNowMs - state.installAtMs).coerceAtLeast(0L)
-                    val trackedPct = if (sinceInstallMs > 0L) (totalTracked.toDouble() / sinceInstallMs.toDouble()) * 100.0 else 0.0
                     Text("% tempo tracciato: ${"%.1f".format(trackedPct)}%")
-                    val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L).coerceAtLeast(0L) } ?: 0L)
                     Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
@@ -641,34 +644,20 @@ items(inactiveTasks, key = { it.id }) { task ->
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Nascondi tag nei task inattivi")
-                        Checkbox(
-                            checked = hideInactiveTags,
-                            onCheckedChange = { checked ->
-                                hideInactiveTags = checked
-                                UiPrefsStore.setHideInactiveTags(context, checked)
-                            }
-                        )
-                    }
-
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         Text("Mostra secondi")
                         Checkbox(
                             checked = showSeconds,
-                            onCheckedChange = onShowSecondsChange
+                            onCheckedChange = { checked ->
+                                showSeconds = checked
+                                UiPrefsStore.setShowSeconds(context, checked)
+                            }
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text("Suggerimento", style = MaterialTheme.typography.titleMedium)
-                    Text("Se per un periodo ti servono solo pochi task, crea un tag ⭐ e usa il filtro ⭐.")
                 }
             },
-            confirmButton = { Button(onClick = { showSettings = false }) { Text("Chiudi") } }
+            confirmButton = {
+                TextButton(onClick = { showSettings = false }) { Text("OK") }
+            }
         )
     }
 
