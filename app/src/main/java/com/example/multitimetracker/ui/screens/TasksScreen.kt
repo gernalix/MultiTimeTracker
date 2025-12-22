@@ -1,4 +1,4 @@
-// v41
+// v42
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -145,6 +145,7 @@ fun TasksScreen(
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
     var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
+    var hideHoursIfZero by rememberSaveable { mutableStateOf(UiPrefsStore.getHideHoursIfZero(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -318,6 +319,7 @@ fun TasksScreen(
                     allTags = visibleTags,
                     tagColors = tagColors,
                     showSeconds = showSeconds,
+                    hideHoursIfZero = hideHoursIfZero,
                     nowMs = state.nowMs,
                     onToggleTaskById = onToggleTask,
                     onLongPressTaskById = { openedTaskId = it }
@@ -371,8 +373,8 @@ fun TasksScreen(
                                 }
                             )
                             SwipeToDismissBox(
-                                state = dismissState,
-                                backgroundContent = {
+                        state = dismissState,
+                        backgroundContent = {
                                     val bg = when (dismissState.dismissDirection) {
                                         SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
                                         SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
@@ -475,8 +477,8 @@ items(inactiveTasks, key = { it.id }) { task ->
                             ) + fadeOut(animationSpec = tween(600, easing = FastOutSlowInEasing))
                         ) {
                             SwipeToDismissBox(
-                                state = dismissState,
-                                backgroundContent = {
+                        state = dismissState,
+                        backgroundContent = {
                                     val bgColor = when (dismissState.dismissDirection) {
                                         SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
                                         SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
@@ -617,9 +619,9 @@ items(inactiveTasks, key = { it.id }) { task ->
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
-                    Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds)}")
+                    Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds, hideHoursIfZero)}")
                     Text("% tempo tracciato: ${"%.1f".format(trackedPct)}%")
-                    Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds)}")
+                    Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds, hideHoursIfZero)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
 
@@ -653,6 +655,21 @@ items(inactiveTasks, key = { it.id }) { task ->
                                 showSeconds = checked
                                 UiPrefsStore.setShowSeconds(context, checked)
                                 showSeconds = checked
+                            }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Nascondi ore se sono 0")
+                        Checkbox(
+                            checked = hideHoursIfZero,
+                            onCheckedChange = { checked ->
+                                hideHoursIfZero = checked
+                                UiPrefsStore.setHideHoursIfZero(context, checked)
                             }
                         )
                     }
@@ -814,6 +831,7 @@ private fun ActiveTasksMinimalPanel(
     allTags: List<Tag>,
     tagColors: Map<Long, Color>,
     showSeconds: Boolean,
+    hideHoursIfZero: Boolean,
     nowMs: Long,
     onToggleTaskById: (Long) -> Unit,
     onLongPressTaskById: (Long) -> Unit
@@ -884,7 +902,7 @@ private fun ActiveTasksMinimalPanel(
                     }
 
                     Text(
-                        text = formatDuration(shownMs, showSeconds),
+                        text = formatDuration(shownMs, showSeconds, hideHoursIfZero),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -940,7 +958,7 @@ private fun TaskHistoryDialog(
             ) {
                 if (grandTotal > 0L) {
                     Text(
-                        text = "Totale: ${formatDuration(grandTotal, showSeconds)}",
+                        text = "Totale: ${formatDuration(grandTotal, showSeconds, hideHoursIfZero)}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -994,7 +1012,7 @@ private fun TaskHistoryDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("${timeOf(s.startTs)} → ${timeOf(s.endTs)}", style = MaterialTheme.typography.bodySmall)
-                                Text(formatDuration(dur, showSeconds), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                Text(formatDuration(dur, showSeconds, hideHoursIfZero), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }
@@ -1270,16 +1288,24 @@ private fun openLink(context: Context, raw: String) {
     }
 }
 
-private fun formatDuration(ms: Long, showSeconds: Boolean = true): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean = true, hideHoursIfZero: Boolean = false): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
     return if (showSeconds) {
-        "%02d:%02d:%02d".format(hours, min, sec)
+        if (hideHoursIfZero && hours == 0L) {
+            "${min}:${"%02d".format(sec)}"
+        } else {
+            "%02d:%02d:%02d".format(hours, min, sec)
+        }
     } else {
-        "%02d:%02d".format(hours, min)
+        if (hideHoursIfZero && hours == 0L) {
+            "${min}"
+        } else {
+            "%02d:%02d".format(hours, min)
+        }
     }
 }
 

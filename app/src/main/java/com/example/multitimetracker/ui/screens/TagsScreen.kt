@@ -1,4 +1,4 @@
-// v19
+// v20
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -194,7 +194,7 @@ fun TagsScreen(
                 val shownMs = unionDurationMs(closedIntervals + openIntervals)
 
                 val runningCount = feedingTasks.count { it.isRunning }
-                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else "In pausa"
+                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
 
                 val sharedTagIds = feedingTasks
                     .asSequence()
@@ -263,7 +263,7 @@ fun TagsScreen(
                             }
                         }
                         },
-                        content = {
+                    ) {
                         TagRow(
                             color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
                             tag = tag,
@@ -271,11 +271,12 @@ fun TagsScreen(
                             runningText = runningText,
                             highlightRunning = runningCount > 0,
                             sharedCount = sharedCount,
-            showSeconds = showSeconds,
+                            showSeconds = showSeconds,
+                            hideHoursIfZero = hideHoursIfZero,
                             onOpen = { openedTagId = tag.id }
                         )
-                        }
-                    )
+                    }
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-// v22
+// v23
 @file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
@@ -53,6 +53,7 @@ fun TaskRow(
     highlightRunning: Boolean,
     showTime: Boolean = true,
     showSeconds: Boolean = true,
+    hideHoursIfZero: Boolean = false,
     showTags: Boolean = true,
     highlightJustCreated: Boolean = false,
     onToggle: () -> Unit,
@@ -137,7 +138,7 @@ if (linkText.isNotBlank()) {
             ) {
                 if (showTime) {
                     Text(
-                        text = formatDuration(shownMs, showSeconds),
+                        text = formatDuration(shownMs, showSeconds, hideHoursIfZero),
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1
                     )
@@ -247,15 +248,23 @@ private fun CompactTagChip(
 }
 
 
-private fun formatDuration(ms: Long, showSeconds: Boolean): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean, hideHoursIfZero: Boolean): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
     return if (showSeconds) {
-        "%02d:%02d:%02d".format(hours, min, sec)
+        if (hideHoursIfZero && hours == 0L) {
+            "${min}:${"%02d".format(sec)}"
+        } else {
+            "%02d:%02d:%02d".format(hours, min, sec)
+        }
     } else {
-        "%02d:%02d".format(hours, min)
+        if (hideHoursIfZero && hours == 0L) {
+            "${min}"
+        } else {
+            "%02d:%02d".format(hours, min)
+        }
     }
 }
