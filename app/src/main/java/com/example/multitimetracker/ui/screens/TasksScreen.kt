@@ -1,4 +1,4 @@
-// v37
+// v39
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -98,6 +99,8 @@ import com.example.multitimetracker.ui.theme.assignDistinctTagColors
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun TasksScreen(
@@ -884,90 +887,167 @@ private fun AddTaskDialog(
     onAddTag: (String) -> Unit,
     onConfirm: (String, Set<Long>, String) -> Unit
 ) {
+    var step by remember { mutableStateOf(1) } // 1 = titolo/link, 2 = tag selection
+
     var name by remember { mutableStateOf("") }
-    var newTag by remember { mutableStateOf("") }
-    var link by remember { mutableState of("") }
+    var link by remember { mutableStateOf("") }
+
+    var tagQuery by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<Long>()) }
+
+    // When user creates a brand-new tag from search, we want it to end up selected automatically
+    var pendingSelectTagName by remember { mutableStateOf<String?>(null) }
+
+    // Auto-select newly added tag when it appears in the list
+    val pendingName = pendingSelectTagName
+    if (pendingName != null) {
+        val newlyAdded = tags.firstOrNull { it.name.equals(pendingName, ignoreCase = true) }
+        if (newlyAdded != null && !selected.contains(newlyAdded.id)) {
+            selected = selected + newlyAdded.id
+            pendingSelectTagName = null
+        }
+    }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    val titleOk = name.trim().isNotEmpty()
+
+    val filteredTags = remember(tags, tagQuery) {
+        val q = tagQuery.trim()
+        if (q.isEmpty()) tags else tags.filter { it.name.contains(q, ignoreCase = true) }
+    }
+    val canAddTagFromQuery = remember(tags, tagQuery) {
+        val q = tagQuery.trim()
+        if (q.isEmpty()) return@remember false
+        tags.none { it.name.equals(q, ignoreCase = true) }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nuovo task") },
+        title = {
+            Text(if (step == 1) "Nuovo task" else "Seleziona tag")
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nome task") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = link,
-                    onValueChange = { link = it },
-                    label = { Text("Link (opzionale)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (step == 1) {
                     OutlinedTextField(
-                        value = newTag,
-                        onValueChange = { newTag = it },
-                        label = { Text("Nuovo tag") },
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Titolo (obbligatorio)") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Button(onClick = {
-                        val t = newTag.trim()
-                        if (t.isNotBlank()) {
-                            onAddTag(t)
-                            newTag = ""
-                        }
-                    }) { Text("+") }
-                }
 
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 260.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(tags, key = { it.id }) { tag ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(tag.name)
-                            Checkbox(
-                                checked = selected.contains(tag.id),
-                                onCheckedChange = { checked ->
-                                    selected = if (checked) selected + tag.id else selected - tag.id
+                    OutlinedTextField(
+                        value = link,
+                        onValueChange = { link = it },
+                        label = { Text("Link (opzionale)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = tagQuery,
+                        onValueChange = { tagQuery = it },
+                        label = { Text("Cerca tag") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (canAddTagFromQuery) {
+                        TextButton(
+                            onClick = {
+                                val q = tagQuery.trim()
+                                if (q.isNotEmpty()) {
+                                    onAddTag(q)
+                                    pendingSelectTagName = q
+                                    tagQuery = ""
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
                                 }
-                            )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("➕ Aggiungi tag \"${tagQuery.trim()}\"")
+                        }
+                    }
+
+                    if (filteredTags.isEmpty()) {
+                        Text("Nessun tag")
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            filteredTags.forEach { tag ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Checkbox(
+                                            checked = selected.contains(tag.id),
+                                            onCheckedChange = { checked ->
+                                                selected = if (checked) selected + tag.id else selected - tag.id
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(tag.name)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                focusManager.clearFocus()
-                keyboardController?.hide()
-                onConfirm(name, selected, link)
-            }) { Text("Crea") }
+            val label = if (step == 1) "Next" else "OK"
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+
+                    if (step == 1) {
+                        if (titleOk) step = 2
+                    } else {
+                        onConfirm(name.trim(), selected, link.trim())
+                    }
+                },
+                enabled = if (step == 1) titleOk else true
+            ) { Text(label) }
         },
         dismissButton = {
-            Button(onClick = {
-                focusManager.clearFocus()
-                keyboardController?.hide()
-                onDismiss()
-            }) { Text("Annulla") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (step == 2) {
+                    TextButton(
+                        onClick = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                            step = 1
+                        }
+                    ) { Text("Indietro") }
+                }
+                TextButton(
+                    onClick = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onDismiss()
+                    }
+                ) { Text("Annulla") }
+            }
         }
     )
 }
+
 
 @Composable
 private fun EditTaskDialog(
