@@ -1,4 +1,4 @@
-// v20
+// v21
 @file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
@@ -52,6 +52,7 @@ fun TaskRow(
     nowMs: Long,
     highlightRunning: Boolean,
     showTime: Boolean = true,
+    showSeconds: Boolean = true,
     showTags: Boolean = true,
     highlightJustCreated: Boolean = false,
     onToggle: () -> Unit,
@@ -136,7 +137,7 @@ if (linkText.isNotBlank()) {
             ) {
                 if (showTime) {
                     Text(
-                        text = formatDuration(shownMs),
+                        text = formatDuration(shownMs, showSeconds),
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1
                     )
@@ -246,11 +247,15 @@ private fun CompactTagChip(
 }
 
 
-private fun formatDuration(ms: Long): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
-    return "%02d:%02d:%02d".format(hours, min, sec)
+    return if (showSeconds) {
+        "%02d:%02d:%02d".format(hours, min, sec)
+    } else {
+        "%02d:%02d".format(hours, min)
+    }
 }

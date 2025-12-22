@@ -1,4 +1,4 @@
-// v15
+// v16
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -32,6 +32,7 @@ fun TagRow(
     runningText: String,
     highlightRunning: Boolean,
     sharedCount: Int,
+    showSeconds: Boolean = true,
     onOpen: () -> Unit
 ) {
     val nameBg = color.copy(alpha = 0.35f)
@@ -76,18 +77,22 @@ fun TagRow(
         // Destra: durata totale
         Text(
             modifier = Modifier.align(Alignment.CenterEnd),
-            text = formatDuration(shownMs),
+            text = formatDuration(shownMs, showSeconds),
             style = MaterialTheme.typography.labelLarge
         )
     }
     }
 }
 
-private fun formatDuration(ms: Long): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
-    return "%02d:%02d:%02d".format(hours, min, sec)
+    return if (showSeconds) {
+        "%02d:%02d:%02d".format(hours, min, sec)
+    } else {
+        "%02d:%02d".format(hours, min)
+    }
 }

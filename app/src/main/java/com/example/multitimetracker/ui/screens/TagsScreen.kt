@@ -1,4 +1,4 @@
-// v17
+// v18
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -97,7 +97,8 @@ fun TagsScreen(
     onRenameTag: (Long, String) -> Unit,
     onDeleteTag: (Long, Boolean) -> Unit,
     onRestoreTag: (Long) -> Unit,
-    onPurgeTag: (Long) -> Unit
+    onPurgeTag: (Long) -> Unit,
+    showSeconds: Boolean
 ) {
     var deletingTagId by remember { mutableStateOf<Long?>(null) }
     var showTrash by remember { mutableStateOf(false) }
@@ -264,6 +265,7 @@ fun TagsScreen(
                             runningText = runningText,
                             highlightRunning = runningCount > 0,
                             sharedCount = sharedCount,
+            showSeconds = showSeconds,
                             onOpen = { openedTagId = tag.id }
                         )
                         }
@@ -363,7 +365,7 @@ fun TagsScreen(
                             items(tasksWithTag, key = { it.id }) { task ->
                                 val ms = engine.displayMs(task.totalMs, task.lastStartedAtMs, state.nowMs)
                                 val dot = if (task.isRunning) "🟢" else "⚪"
-                                Text("$dot ${task.name} — ${formatDuration(ms)}")
+                                Text("$dot ${task.name} — ${formatDuration(ms, showSeconds)}")
                             }
                         }
                     }
@@ -500,11 +502,15 @@ private fun AddOrRenameTagDialog(
     )
 }
 
-private fun formatDuration(ms: Long): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
-    return "%02d:%02d:%02d".format(hours, min, sec)
+    return if (showSeconds) {
+        "%02d:%02d:%02d".format(hours, min, sec)
+    } else {
+        "%02d:%02d".format(hours, min)
+    }
 }

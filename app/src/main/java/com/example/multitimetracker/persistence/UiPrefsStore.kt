@@ -1,4 +1,4 @@
-// v1
+// v2
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -12,6 +12,7 @@ object UiPrefsStore {
 
     private const val KEY_HIDE_INACTIVE_TIME = "hide_inactive_task_time"
     private const val KEY_HIDE_INACTIVE_TAGS = "hide_inactive_task_tags"
+    private const val KEY_SHOW_SECONDS = "show_seconds"
 
     fun getHideInactiveTime(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -34,4 +35,16 @@ object UiPrefsStore {
             .putBoolean(KEY_HIDE_INACTIVE_TAGS, value)
             .apply()
     }
+
+    fun getShowSeconds(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_SHOW_SECONDS, true)
+
+    fun setShowSeconds(context: Context, value: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHOW_SECONDS, value)
+            .apply()
+    }
+
 }

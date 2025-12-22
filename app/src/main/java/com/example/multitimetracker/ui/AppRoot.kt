@@ -3,7 +3,7 @@ package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -28,11 +28,11 @@ fun AppRoot(
     onFocusConsumed: () -> Unit = {}
 ) {
     val state by vm.state.collectAsState()
-    varTabScaffold(state = state, vm = vm, focusTaskId = focusTaskId, onFocusConsumed = onFocusConsumed)
+    VarTabScaffold(state = state, vm = vm, focusTaskId = focusTaskId, onFocusConsumed = onFocusConsumed)
 }
 
 @Composable
-private fun varTabScaffold(
+private fun VarTabScaffold(
     state: com.example.multitimetracker.model.UiState,
     vm: MainViewModel,
     focusTaskId: Long?,
@@ -54,7 +54,7 @@ private fun varTabScaffold(
                     NavigationBarItem(
                         selected = tab == Tab.TAGS,
                         onClick = { tabState.value = Tab.TAGS },
-                        icon = { Icon(Icons.Filled.Label, contentDescription = "Tags") },
+                        icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
                         label = { Text("Tags") }
                     )
                 }

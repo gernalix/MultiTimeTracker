@@ -1,4 +1,4 @@
-// v36
+// v37
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class
@@ -23,6 +23,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,6 +74,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -132,6 +135,7 @@ fun TasksScreen(
     // View prefs for inactive tasks (persisted).
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
+    var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -309,6 +313,9 @@ fun TasksScreen(
             if (runningTasks.isNotEmpty()) {
                 ActiveTasksMinimalPanel(
                     tasks = runningTasks,
+                    allTags = visibleTags,
+                    tagColors = tagColors,
+                    showSeconds = showSeconds,
                     nowMs = state.nowMs,
                     onToggleTaskById = onToggleTask,
                     onLongPressTaskById = { openedTaskId = it },
@@ -404,6 +411,7 @@ fun TasksScreen(
                                         highlightJustCreated = highlightThis,
                                         showTime = !hideInactiveTime,
                                         showTags = !hideInactiveTags,
+                                        showSeconds = showSeconds,
                                         onToggle = {
                                             onToggleTask(task.id)
                                             scope.launch { listState.animateScrollToItem(0) }
@@ -492,9 +500,9 @@ fun TasksScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
-                    Text("Tempo totale tracciato: ${formatDuration(totalTracked)}")
+                    Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds)}")
                     val appUsageShown = state.appUsageMs + (state.appUsageRunningSinceMs?.let { (localNowMs - it).coerceAtLeast(0L) } ?: 0L)
-                    Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown)}")
+                    Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds)}")
                     Text("Task totali: $tasksTotal")
                     Text("Tag totali: $tagsTotal")
 
@@ -531,6 +539,21 @@ fun TasksScreen(
                         )
                     }
 
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Mostra secondi")
+                        Checkbox(
+                            checked = showSeconds,
+                            onCheckedChange = { checked ->
+                                showSeconds = checked
+                                UiPrefsStore.setShowSeconds(context, checked)
+                            }
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Text("Suggerimento", style = MaterialTheme.typography.titleMedium)
                     Text("Se per un periodo ti servono solo pochi task, crea un tag ⭐ e usa il filtro ⭐.")
@@ -663,6 +686,9 @@ private fun FilterPanel(
 @Composable
 private fun ActiveTasksMinimalPanel(
     tasks: List<Task>,
+    allTags: List<Tag>,
+    tagColors: Map<Long, Color>,
+    showSeconds: Boolean,
     nowMs: Long,
     onToggleTaskById: (Long) -> Unit,
     onLongPressTaskById: (Long) -> Unit,
@@ -713,18 +739,28 @@ private fun ActiveTasksMinimalPanel(
                             )
                             if (task.link.isNotBlank()) Text("🔗")
                         }
-                        val tagCount = task.tagIds.size
-                        if (tagCount > 0) {
-                            Text(
-                                text = "#$tagCount",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        val taskTags = remember(task.tagIds, allTags) {
+                            allTags.filter { task.tagIds.contains(it.id) }
+                        }
+                        if (taskTags.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(top = 6.dp)
+                            ) {
+                                taskTags.forEach { tag ->
+                                    CompactTagChip(
+                                        label = tag.name,
+                                        color = tagColors[tag.id]
+                                            ?: MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
 
                     Text(
-                        text = formatDuration(shownMs),
+                        text = formatDuration(shownMs, showSeconds),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -779,7 +815,7 @@ private fun TaskHistoryDialog(
             ) {
                 if (grandTotal > 0L) {
                     Text(
-                        text = "Totale: ${formatDuration(grandTotal)}",
+                        text = "Totale: ${formatDuration(grandTotal, showSeconds)}",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -833,7 +869,7 @@ private fun TaskHistoryDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text("${'$'}{timeOf(s.startTs)} → ${'$'}{timeOf(s.endTs)}", style = MaterialTheme.typography.bodySmall)
-                                Text(formatDuration(dur), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                                Text(formatDuration(dur, showSeconds), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }
@@ -1002,6 +1038,27 @@ private fun EditTaskDialog(
     )
 }
 
+
+@Composable
+private fun CompactTagChip(
+    label: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(color)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
 private fun openLink(context: Context, raw: String) {
     val trimmed = raw.trim()
     if (trimmed.isEmpty()) return
@@ -1012,13 +1069,17 @@ private fun openLink(context: Context, raw: String) {
     }
 }
 
-private fun formatDuration(ms: Long): String {
+private fun formatDuration(ms: Long, showSeconds: Boolean): String {
     val totalSec = ms / 1000
     val sec = totalSec % 60
     val totalMin = totalSec / 60
     val min = totalMin % 60
     val hours = totalMin / 60
-    return "%02d:%02d:%02d".format(hours, min, sec)
+    return if (showSeconds) {
+        "%02d:%02d:%02d".format(hours, min, sec)
+    } else {
+        "%02d:%02d".format(hours, min)
+    }
 }
 
 private fun unionTotalMs(intervals: List<Pair<Long, Long>>): Long {
