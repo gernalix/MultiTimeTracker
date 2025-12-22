@@ -1,4 +1,4 @@
-// v35
+// v36
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class
@@ -11,7 +11,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -351,7 +350,7 @@ fun TasksScreen(
                             }
                         )
 
-                        AnimatedVisibility(
+                        androidx.compose.animation.AnimatedVisibility(
                             visible = !removingTaskIds.contains(task.id),
                             enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
                                 fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
@@ -827,7 +826,7 @@ private fun TaskHistoryDialog(
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
-                        items(list, key = { it.id }) { s ->
+                        items(list, key = { "${it.startTs}_${it.endTs}" }) { s ->
                             val dur = (s.endTs - s.startTs).coerceAtLeast(0L)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
