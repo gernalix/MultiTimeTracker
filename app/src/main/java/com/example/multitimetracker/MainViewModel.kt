@@ -409,7 +409,7 @@ fun reloadFromSnapshot(context: Context) {
         Log.i(LOG_TAG, "importBackupBlocking: reading from dir='${dir.name ?: "(null)"}' uri=${dir.uri}")
         val snapshot = CsvImporter.importFromBackupFolder(context, dir)
 
-        }
+        Log.i(
         Log.i(
             LOG_TAG,
             "importBackupBlocking: parsed snapshot tasks=${snapshot.tasks.size} tags=${snapshot.tags.size} " +

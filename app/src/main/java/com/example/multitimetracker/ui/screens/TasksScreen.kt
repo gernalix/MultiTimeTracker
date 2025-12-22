@@ -144,6 +144,7 @@ fun TasksScreen(
     // View prefs for inactive tasks (persisted).
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
+    var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -589,7 +590,8 @@ items(inactiveTasks, key = { it.id }) { task ->
     if (showSettings) {
         // Recompute stats shown inside dialog.
         val intervals = mutableListOf<Pair<Long, Long>>()
-        state.taskSessions.asSequence().filter { !it.isDeleted }.forEach { s ->
+        val deletedTaskIds = state.tasks.asSequence().filter { it.isDeleted }.map { it.id }.toSet()
+        state.taskSessions.asSequence().filter { it.taskId !in deletedTaskIds }.forEach { s ->
             if (s.endTs > s.startTs) intervals.add(s.startTs to s.endTs)
         }
         state.tasks.asSequence().filter { it.isRunning && it.lastStartedAtMs != null }.forEach { t ->
@@ -650,6 +652,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                             onCheckedChange = { checked ->
                                 showSeconds = checked
                                 UiPrefsStore.setShowSeconds(context, checked)
+                                showSeconds = checked
                             }
                         )
                     }
