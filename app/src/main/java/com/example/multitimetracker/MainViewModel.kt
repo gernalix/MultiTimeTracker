@@ -1,4 +1,4 @@
-// v26
+// v27
 package com.example.multitimetracker
 
 import android.content.Context
@@ -432,7 +432,8 @@ fun reloadFromSnapshot(context: Context) {
                 taskSessions = snapshot.taskSessions,
                 tagSessions = snapshot.tagSessions,
                 appUsageMs = snapshot.appUsageMs,
-                        installAtMs = minOf(it.installAtMs, snapshot.installAtMs),
+                // Imported backups don't carry install time; keep current persisted value.
+                installAtMs = it.installAtMs,
                 appUsageRunningSinceMs = null,
                 nowMs = System.currentTimeMillis()
             )
@@ -711,7 +712,8 @@ fun exportCsv(context: Context) {
                         taskSessions = snapshot.taskSessions,
                         tagSessions = snapshot.tagSessions,
                         appUsageMs = snapshot.appUsageMs,
-                        installAtMs = minOf(it.installAtMs, snapshot.installAtMs),
+                        // Imported CSV doesn't carry install time; keep current persisted value.
+                        installAtMs = it.installAtMs,
                         appUsageRunningSinceMs = null,
                         nowMs = System.currentTimeMillis()
                     )
