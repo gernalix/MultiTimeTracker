@@ -1,4 +1,4 @@
-// v25
+// v26
 package com.example.multitimetracker
 
 import android.content.Context
@@ -410,7 +410,6 @@ fun reloadFromSnapshot(context: Context) {
         val snapshot = CsvImporter.importFromBackupFolder(context, dir)
 
         Log.i(
-        Log.i(
             LOG_TAG,
             "importBackupBlocking: parsed snapshot tasks=${snapshot.tasks.size} tags=${snapshot.tags.size} " +
                 "taskSessions=${snapshot.taskSessions.size} tagSessions=${snapshot.tagSessions.size} runtime=${snapshot.runtimeSnapshot != null}"
@@ -421,7 +420,7 @@ fun reloadFromSnapshot(context: Context) {
             tags = snapshot.tags,
             importedTaskSessions = snapshot.taskSessions,
             importedTagSessions = snapshot.tagSessions,
-                    runtimeSnapshot = snapshot.runtimeSnapshot
+            runtimeSnapshot = snapshot.runtimeSnapshot
         )
 
         Log.i(LOG_TAG, "importBackupBlocking: engine loaded snapshot")
@@ -704,12 +703,7 @@ fun exportCsv(context: Context) {
                 )
 
                 Log.i(LOG_TAG, "importCsv: engine loaded snapshot")
-
-                    val earliestTask = snapshot.taskSessions.minOfOrNull { it.startTs }
-                    val earliestTag = snapshot.tagSessions.minOfOrNull { it.startTs }
-                    listOfNotNull(earliestTask, earliestTag).minOrNull()
-                }
-
+                
                 _state.update {
                     it.copy(
                         tasks = snapshot.tasks,
