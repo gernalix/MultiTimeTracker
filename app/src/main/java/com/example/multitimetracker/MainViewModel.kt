@@ -1,4 +1,4 @@
-// v27
+// v28
 package com.example.multitimetracker
 
 import android.content.Context
@@ -446,7 +446,16 @@ fun reloadFromSnapshot(context: Context) {
         Log.i(LOG_TAG, "importBackupBlocking: END")
     }
 
-    fun toggleTask(taskId: Long) {
+    private fun computeActiveTagStartByTagId(): Map<Long, Long> {
+    val runtime = engine.exportRuntimeSnapshot()
+    // For each tag, keep the earliest start among all running tasks that include that tag.
+    return runtime.activeTagStart
+        .groupBy({ it.second }, { it.third }) // tagId -> [startTs...]
+        .mapValues { (_, v) -> v.minOrNull() ?: 0L }
+        .filterValues { it > 0L }
+}
+
+fun toggleTask(taskId: Long) {
         _state.update { current ->
             val now = System.currentTimeMillis()
             val result = engine.toggleTask(
@@ -460,6 +469,7 @@ fun reloadFromSnapshot(context: Context) {
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = computeActiveTagStartByTagId(),
                 nowMs = now
             )
             updated
@@ -540,6 +550,7 @@ fun reloadFromSnapshot(context: Context) {
                 tags = result.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = computeActiveTagStartByTagId(),
                 nowMs = now
             )
             updated
@@ -562,6 +573,7 @@ fun reloadFromSnapshot(context: Context) {
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = computeActiveTagStartByTagId(),
                 nowMs = now
             )
             updated
@@ -591,6 +603,7 @@ fun reloadFromSnapshot(context: Context) {
                 tags = res.tags,
                 taskSessions = engine.getTaskSessions(),
                 tagSessions = engine.getTagSessions(),
+                activeTagStart = computeActiveTagStartByTagId(),
                 nowMs = now
             )
             updated

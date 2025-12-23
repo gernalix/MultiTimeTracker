@@ -1,4 +1,4 @@
-// v13
+// v14
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -463,9 +463,23 @@ class TimeEngine {
 
         activeTagStart[key] = nowMs
 
+        // Keep a tag-level "running since" for UI: earliest start among active sessions for this tag.
+        val earliest = activeTagStart
+            .filter { (k, _) -> k.tagId == tagId }
+            .minOfOrNull { it.value }
+
         return tags.map { tag ->
             if (tag.id != tagId) return@map tag
-            tag.copy(activeChildrenCount = tag.activeChildrenCount + 1)
+            val prevStarted = tag.lastStartedAtMs
+            val newStarted = when {
+                earliest != null -> earliest
+                prevStarted != null -> minOf(prevStarted, nowMs)
+                else -> nowMs
+            }
+            tag.copy(
+                activeChildrenCount = tag.activeChildrenCount + 1,
+                lastStartedAtMs = newStarted
+            )
         }
     }
 
@@ -473,7 +487,9 @@ class TimeEngine {
         val key = TagKey(taskId = task.id, tagId = tagId)
         val start = activeTagStart.remove(key) ?: return tags
 
-        if (nowMs > start) {
+        val delta = if (nowMs > start) (nowMs - start) else 0L
+
+        if (delta > 0L) {
             val tagNameById = tags.associate { it.id to it.name }
             val tagName = tagNameById[tagId] ?: ""
             tagSessions.add(
@@ -488,9 +504,22 @@ class TimeEngine {
             )
         }
 
+        // Recompute earliest active start for this tag (if still running for other tasks).
+        val earliest = activeTagStart
+            .filter { (k, _) -> k.tagId == tagId }
+            .minOfOrNull { it.value }
+
         return tags.map { tag ->
             if (tag.id != tagId) return@map tag
-            tag.copy(activeChildrenCount = (tag.activeChildrenCount - 1).coerceAtLeast(0))
+
+            val newCount = (tag.activeChildrenCount - 1).coerceAtLeast(0)
+            val newStartedAt = earliest // null if no longer active
+
+            tag.copy(
+                activeChildrenCount = newCount,
+                totalMs = tag.totalMs + delta,
+                lastStartedAtMs = newStartedAt
+            )
         }
     }
 }
