@@ -1,4 +1,4 @@
-// v45
+// v46
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -337,7 +337,21 @@ fun TasksScreen(
                     hideHoursIfZero = hideHoursIfZero,
                     nowMs = state.nowMs,
                     onToggleTaskById = onToggleTask,
-                    onLongPressTaskById = { openedTaskId = it }
+                    onLongPressTaskById = { openedTaskId = it },
+                    onEditTaskById = { editingTaskId = it },
+                    onDeleteTask = { task ->
+                        val id = task.id
+                        val taskName = task.name
+                        if (!removingTaskIds.contains(id)) {
+                            removingTaskIds = removingTaskIds + id
+                            scope.launch {
+                                delay(600)
+                                onDeleteTask(id)
+                                Toast.makeText(context, "Task $taskName eliminato", Toast.LENGTH_SHORT).show()
+                                removingTaskIds = removingTaskIds - id
+                            }
+                        }
+                    }
                 )
             }
 
@@ -747,10 +761,13 @@ private fun ActiveTasksMinimalPanel(
     hideHoursIfZero: Boolean,
     nowMs: Long,
     onToggleTaskById: (Long) -> Unit,
-    onLongPressTaskById: (Long) -> Unit
+    onLongPressTaskById: (Long) -> Unit,
+    onEditTaskById: (Long) -> Unit,
+    onDeleteTask: (Task) -> Unit
 ) {
     val engine = remember { TimeEngine() }
     val runningBg = remember { Color(0xFFCCFFCC) }
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -760,69 +777,117 @@ private fun ActiveTasksMinimalPanel(
     ) {
         tasks.forEach { task ->
             val shownMs = engine.displayMs(task.totalMs, task.lastStartedAtMs, nowMs)
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pointerInput(task.id) {
-                        detectTapGestures(
-                            onTap = { onToggleTaskById(task.id) },
-                            onLongPress = { onLongPressTaskById(task.id) }
-                        )
-                    },
-                color = runningBg,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Row(
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    when (value) {
+                        SwipeToDismissBoxValue.StartToEnd -> {
+                            onEditTaskById(task.id)
+                        }
+                        SwipeToDismissBoxValue.EndToStart -> {
+                            onDeleteTask(task)
+                        }
+                        else -> Unit
+                    }
+                    scope.launch {
+                        delay(240)
+                        dismissState.snapTo(SwipeToDismissBoxValue.Settled)
+                    }
+                    false
+                }
+            )
+
+            SwipeToDismissBox(
+                state = dismissState,
+                backgroundContent = {
+                    val (label, bgColor) = when (dismissState.dismissDirection) {
+                        SwipeToDismissBoxValue.StartToEnd -> "Modifica" to MaterialTheme.colorScheme.surfaceVariant
+                        SwipeToDismissBoxValue.EndToStart -> "Elimina" to MaterialTheme.colorScheme.errorContainer
+                        else -> "" to Color.Transparent
+                    }
+                    val alignment = when (dismissState.dismissDirection) {
+                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                        else -> Alignment.Center
+                    }
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(bgColor),
+                        contentAlignment = alignment
+                    ) {
+                        if (label.isNotBlank()) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.padding(horizontal = 14.dp)
+                            )
+                        }
+                    }
+                },
+                content = {
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = task.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                        .pointerInput(task.id) {
+                            detectTapGestures(
+                                onTap = { onToggleTaskById(task.id) },
+                                onLongPress = { onLongPressTaskById(task.id) }
                             )
-                            if (task.link.isNotBlank()) Text("🔗")
-                        }
-                        val taskTags = remember(task.tagIds, allTags) {
-                            allTags.filter { task.tagIds.contains(it.id) }
-                        }
-                        if (taskTags.isNotEmpty()) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.padding(top = 6.dp)
+                        },
+                    color = runningBg,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                taskTags.forEach { tag ->
-                                    CompactTagChip(
-                                        label = tag.name,
-                                        color = tagColors[tag.id]
-                                            ?: MaterialTheme.colorScheme.surfaceVariant
-                                    )
+                                Text(
+                                    text = task.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (task.link.isNotBlank()) Text("🔗")
+                            }
+                            val taskTags = remember(task.tagIds, allTags) {
+                                allTags.filter { task.tagIds.contains(it.id) }
+                            }
+                            if (taskTags.isNotEmpty()) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(top = 6.dp)
+                                ) {
+                                    taskTags.forEach { tag ->
+                                        CompactTagChip(
+                                            label = tag.name,
+                                            color = tagColors[tag.id]
+                                                ?: MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
+                
+                        Text(
+                            text = formatDuration(shownMs, showSeconds, hideHoursIfZero),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
                     }
-
-                    Text(
-                        text = formatDuration(shownMs, showSeconds, hideHoursIfZero),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
                 }
-            }
+                }
+            )
         }
     }
 }

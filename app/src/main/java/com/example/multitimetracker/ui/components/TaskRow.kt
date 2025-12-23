@@ -1,4 +1,4 @@
-// v23
+// v24
 @file:OptIn(ExperimentalLayoutApi::class)
 package com.example.multitimetracker.ui.components
 
@@ -249,22 +249,32 @@ private fun CompactTagChip(
 
 
 private fun formatDuration(ms: Long, showSeconds: Boolean, hideHoursIfZero: Boolean): String {
-    val totalSec = ms / 1000
-    val sec = totalSec % 60
-    val totalMin = totalSec / 60
-    val min = totalMin % 60
-    val hours = totalMin / 60
-    return if (showSeconds) {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}:${"%02d".format(sec)}"
-        } else {
-            "%02d:%02d:%02d".format(hours, min, sec)
-        }
-    } else {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}"
-        } else {
-            "%02d:%02d".format(hours, min)
+    val totalSeconds = (ms.coerceAtLeast(0L) / 1000L)
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
+
+    val parts = mutableListOf<String>()
+
+    if (!hideHoursIfZero || hours > 0L) {
+        if (hours > 0L) parts.add("${hours}h")
+    }
+
+    val showMinutes = (hours > 0L) || (minutes > 0L)
+    if (showMinutes) {
+        parts.add("${minutes}m")
+    }
+
+    if (showSeconds) {
+        val showSecondsPart = seconds > 0L || parts.isEmpty()
+        if (showSecondsPart) {
+            parts.add("${seconds}s")
         }
     }
+
+    if (!showSeconds && parts.isEmpty()) {
+        parts.add("0m")
+    }
+
+    return parts.joinToString(" ")
 }

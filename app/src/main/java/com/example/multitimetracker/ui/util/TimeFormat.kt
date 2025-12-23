@@ -1,36 +1,49 @@
-// v1
+// v2
 package com.example.multitimetracker.ui.util
 
 /**
  * Formats a duration in ms.
  *
- * - If showSeconds=false: returns H:MM or M (when hideHoursIfZero && hours==0)
- * - If showSeconds=true:  returns H:MM:SS or M:SS (when hideHoursIfZero && hours==0)
+ * Output example: 5h 11m 22s
  *
- * Note: Minutes are not zero-padded when hours are hidden (7:05 not 07:05).
+ * - Units are shown only when meaningful (leading zeros are never padded).
+ * - If hideHoursIfZero=true and hours==0, hours are omitted.
+ * - If showSeconds=false, seconds are omitted.
  */
 fun formatDuration(
     ms: Long,
     showSeconds: Boolean = true,
     hideHoursIfZero: Boolean = false
 ): String {
-    val totalSec = (ms.coerceAtLeast(0L)) / 1000L
-    val sec = totalSec % 60L
-    val totalMin = totalSec / 60L
-    val min = totalMin % 60L
-    val hours = totalMin / 60L
+    val totalSeconds = (ms.coerceAtLeast(0L) / 1000L)
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
 
-    return if (showSeconds) {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}:%02d".format(sec)
-        } else {
-            "%02d:%02d:%02d".format(hours, min, sec)
-        }
-    } else {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}"
-        } else {
-            "%02d:%02d".format(hours, min)
+    val parts = mutableListOf<String>()
+
+    if (!hideHoursIfZero || hours > 0L) {
+        if (hours > 0L) parts.add("${hours}h")
+    }
+
+    // Show minutes when meaningful (or when hours are shown).
+    val showMinutes = (hours > 0L) || (minutes > 0L)
+    if (showMinutes) {
+        parts.add("${minutes}m")
+    }
+
+    if (showSeconds) {
+        val showSecondsPart = seconds > 0L || parts.isEmpty()
+        if (showSecondsPart) {
+            parts.add("${seconds}s")
         }
     }
+
+    // If seconds are hidden and everything is zero, show 0m.
+    if (!showSeconds && parts.isEmpty()) {
+        parts.add("0m")
+    }
+
+    return parts.joinToString(" ")
 }
+
