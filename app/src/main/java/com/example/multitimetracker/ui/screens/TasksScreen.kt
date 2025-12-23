@@ -788,10 +788,7 @@ private fun ActiveTasksMinimalPanel(
                         }
                         else -> Unit
                     }
-                    scope.launch {
-                        delay(240)
-                        dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                    }
+// snapTo removed: invalid self-reference during state init
                     false
                 }
             )
