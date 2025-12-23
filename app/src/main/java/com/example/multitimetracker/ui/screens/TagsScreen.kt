@@ -1,8 +1,11 @@
 // v22
 package com.example.multitimetracker.ui.screens
+
+import com.example.multitimetracker.ui.components.AddOrRenameTagDialog
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
 import com.example.multitimetracker.ui.theme.assignDistinctTagColors
+import com.example.multitimetracker.ui.util.formatDuration
 import android.widget.Toast
 // NOTE: inside LazyColumn item scopes AnimatedVisibility can resolve to the ColumnScope overload.
 // We call it fully qualified where needed to avoid implicit receiver ambiguity.
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -166,55 +170,59 @@ fun TagsScreen(
     }
 
         Box(modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier
-            .padding(inner)
-            .fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(orderedTagMeta, key = { it.tag.id }) { meta ->
-        val tag = meta.tag
-        // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
-        // (le sovrapposizioni contano una sola volta)
-        val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
-        val feedingTaskIds = feedingTasks.map { it.id }.toSet()
+            LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .padding(inner)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(orderedTagMeta, key = { it.tag.id }) { meta ->
+                val tag = meta.tag
+                // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
+                // (le sovrapposizioni contano una sola volta)
+                val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
+                val feedingTaskIds = feedingTasks.map { it.id }.toSet()
 
-        val closedIntervals = state.taskSessions
-            .asSequence()
-            .filter { feedingTaskIds.contains(it.taskId) }
-            .map { Interval(it.startTs, it.endTs) }
-            .toList()
+                val closedIntervals = state.taskSessions
+                    .asSequence()
+                    .filter { feedingTaskIds.contains(it.taskId) }
+                    .map { Interval(it.startTs, it.endTs) }
+                    .toList()
 
-        val openIntervals = feedingTasks
-            .asSequence()
-            .filter { it.isRunning && it.lastStartedAtMs != null }
-            .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
-            .toList()
+                val openIntervals = feedingTasks
+                    .asSequence()
+                    .filter { it.isRunning && it.lastStartedAtMs != null }
+                    .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
+                    .toList()
 
-        val shownMs = unionDurationMs(closedIntervals + openIntervals)
+                val shownMs = unionDurationMs(closedIntervals + openIntervals)
 
-        val runningCount = feedingTasks.count { it.isRunning }
-        val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
+                val runningCount = feedingTasks.count { it.isRunning }
+                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
 
-        val sharedTagIds = feedingTasks
-            .asSequence()
-            .flatMap { it.tagIds.asSequence() }
-            .filter { it != tag.id }
-            .toSet()
-            .intersect(visibleTags.map { it.id }.toSet())
-        val sharedCount = sharedTagIds.size
+                val sharedTagIds = feedingTasks
+                    .asSequence()
+                    .flatMap { it.tagIds.asSequence() }
+                    .filter { it != tag.id }
+                    .toSet()
+                    .intersect(visibleTags.map { it.id }.toSet())
+                val sharedCount = sharedTagIds.size
+
                 val dismissState = rememberSwipeToDismissBoxState(
                     confirmValueChange = { value ->
                         when (value) {
                             SwipeToDismissBoxValue.StartToEnd -> {
+                                // Swipe right -> edit
                                 editingTagId = tag.id
                             }
                             SwipeToDismissBoxValue.EndToStart -> {
+                                // Swipe left -> trash (with semantics prompt)
                                 deletingTagId = tag.id
                             }
                             else -> Unit
                         }
+                        // Keep the item in-place; state changes will drive recomposition.
                         false
                     }
                 )
@@ -229,37 +237,37 @@ fun TagsScreen(
                     SwipeToDismissBox(
                         state = dismissState,
                         backgroundContent = {
-                            val bgColor = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
-                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
-                                else -> Color.Transparent
-                            }
-                            val label = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
-                                SwipeToDismissBoxValue.EndToStart -> "TRASH"
-                                else -> ""
-                            }
-                            val alignment = when (dismissState.dismissDirection) {
-                                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                                else -> Alignment.Center
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 64.dp)
-                                    .background(bgColor),
-                                contentAlignment = alignment
-                            ) {
-                                if (label.isNotBlank()) {
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(horizontal = 14.dp)
-                                    )
-                                }
+                        val bgColor = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
+                            SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
+                            else -> Color.Transparent
+                        }
+                        val label = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
+                            SwipeToDismissBoxValue.EndToStart -> "TRASH"
+                            else -> ""
+                        }
+                        val alignment = when (dismissState.dismissDirection) {
+                            SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                            SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                            else -> Alignment.Center
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 64.dp)
+                                .background(bgColor),
+                            contentAlignment = alignment
+                        ) {
+                            if (label.isNotBlank()) {
+                                Text(
+                                    text = label,
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(horizontal = 14.dp)
+                                )
                             }
                         }
+                        },
                     ) {
                         TagRow(
                             color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
@@ -273,30 +281,33 @@ fun TagsScreen(
                             onOpen = { openedTagId = tag.id }
                         )
                     }
+                    }
+                }
+            }
+        }
+
+            val showScrollToTop = listState.firstVisibleItemIndex > 0
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showScrollToTop,
+                enter = fadeIn(animationSpec = tween(150)),
+                exit = fadeOut(animationSpec = tween(150)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentSize(Alignment.BottomCenter)
+                    .padding(bottom = 92.dp)
+            ) {
+                FloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    modifier = Modifier.size(44.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
                 }
             }
         }
     }
 
-    val showScrollToTop = listState.firstVisibleItemIndex > 0
-    androidx.compose.animation.AnimatedVisibility(
-        visible = showScrollToTop,
-        enter = fadeIn(animationSpec = tween(150)),
-        exit = fadeOut(animationSpec = tween(150)),
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = 92.dp)
-    ) {
-        FloatingActionButton(
-            onClick = { scope.launch { listState.animateScrollToItem(0) } },
-            modifier = Modifier.size(44.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-        ) {
-            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
-        }
-    }
-}
     // Add tag
     if (showAdd) {
         AddOrRenameTagDialog(
@@ -304,21 +315,18 @@ fun TagsScreen(
             initialName = "",
             confirmText = "Crea",
             onDismiss = { showAdd = false },
-            onConfirm = { name ->
-                val n = name.trim()
-                if (n.isEmpty()) return@AddOrRenameTagDialog
-                val exists = state.tags.any { it.name.equals(n, ignoreCase = true) }
+            onConfirm = { newName ->
+                val exists = state.tags.any { it.name.equals(newName, ignoreCase = true) }
                 if (exists) {
                     Toast.makeText(context, "tag già esiste", Toast.LENGTH_SHORT).show()
-                    return@AddOrRenameTagDialog
+                } else {
+                    onAddTag(newName)
+                    showAdd = false
                 }
-                onAddTag(n)
-                showAdd = false
             }
         )
     }
-
-    // Rename tag
+// Rename tag
     val editId = editingTagId
     if (editId != null) {
         val tag = state.tags.firstOrNull { it.id == editId }
@@ -472,46 +480,3 @@ fun TagsScreen(
     }
 
 @Composable
-private fun AddOrRenameTagDialog(
-    title: String,
-    initialName: String,
-    confirmText: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var name by remember { mutableStateOf(initialName) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Nome tag") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(onClick = {
-                val n = name.trim()
-                if (n.isNotEmpty()) onConfirm(n)
-            }) { Text(confirmText) }
-        },
-        dismissButton = { Button(onClick = onDismiss) { Text("Chiudi") } }
-    )
-}
-
-private fun formatDuration(ms: Long, showSeconds: Boolean): String {
-    val totalSec = ms / 1000
-    val sec = totalSec % 60
-    val totalMin = totalSec / 60
-    val min = totalMin % 60
-    val hours = totalMin / 60
-    return if (showSeconds) {
-        "%02d:%02d:%02d".format(hours, min, sec)
-    } else {
-        "%02d:%02d".format(hours, min)
-    }
-}

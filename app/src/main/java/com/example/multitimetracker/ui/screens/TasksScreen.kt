@@ -6,6 +6,8 @@
 )
 package com.example.multitimetracker.ui.screens
 
+import com.example.multitimetracker.ui.util.formatDuration
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -654,7 +656,9 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = showSeconds,
                             onCheckedChange = { checked ->
-                                onShowSecondsChange(checked)
+                                showSeconds = checked
+                                UiPrefsStore.setShowSeconds(context, checked)
+                                showSeconds = checked
                             }
                         )
                     }
@@ -668,6 +672,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = hideHoursIfZero,
                             onCheckedChange = { checked ->
+                                hideHoursIfZero = checked
                                 onHideHoursIfZeroChange(checked)
                             }
                         )
@@ -1285,27 +1290,6 @@ private fun openLink(context: Context, raw: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
-    }
-}
-
-private fun formatDuration(ms: Long, showSeconds: Boolean = true, hideHoursIfZero: Boolean = false): String {
-    val totalSec = ms / 1000
-    val sec = totalSec % 60
-    val totalMin = totalSec / 60
-    val min = totalMin % 60
-    val hours = totalMin / 60
-    return if (showSeconds) {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}:${"%02d".format(sec)}"
-        } else {
-            "%02d:%02d:%02d".format(hours, min, sec)
-        }
-    } else {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}"
-        } else {
-            "%02d:%02d".format(hours, min)
-        }
     }
 }
 

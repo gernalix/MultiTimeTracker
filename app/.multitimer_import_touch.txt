@@ -1,1 +1,1 @@
-2025-12-23 01:33:31 | progetto importato | v6 | zip=multitimer_v6 (1).zip | prefix=app/ | copied=55 | build=failed_exit_9009
+2025-12-23 01:45:34 | progetto importato | v7 | zip=multitimer_v7 (1).zip | prefix=app/ | copied=57 | build=failed_exit_9009

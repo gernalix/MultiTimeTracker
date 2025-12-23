@@ -1,4 +1,4 @@
-// v18
+// v19
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.multitimetracker.model.Tag
+import com.example.multitimetracker.ui.util.formatDuration
 
 /**
  * Riga tag in stile "lista compatta" (variante B: due righe).
@@ -85,23 +86,3 @@ fun TagRow(
     }
 }
 
-private fun formatDuration(ms: Long, showSeconds: Boolean, hideHoursIfZero: Boolean): String {
-    val totalSec = ms / 1000
-    val sec = totalSec % 60
-    val totalMin = totalSec / 60
-    val min = totalMin % 60
-    val hours = totalMin / 60
-    return if (showSeconds) {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}:${"%02d".format(sec)}"
-        } else {
-            "%02d:%02d:%02d".format(hours, min, sec)
-        }
-    } else {
-        if (hideHoursIfZero && hours == 0L) {
-            "${min}"
-        } else {
-            "%02d:%02d".format(hours, min)
-        }
-    }
-}
