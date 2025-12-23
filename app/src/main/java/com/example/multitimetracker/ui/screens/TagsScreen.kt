@@ -49,6 +49,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -164,129 +165,129 @@ fun TagsScreen(
 
         val listState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
-        // When entering the screen, always start from the top.
-        listState.scrollToItem(0)
-    }
+        LaunchedEffect(Unit) {
+            // When entering the screen, always start from the top.
+            listState.scrollToItem(0)
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(orderedTagMeta, key = { it.tag.id }) { meta ->
-                val tag = meta.tag
-                // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
-                // (le sovrapposizioni contano una sola volta)
-                val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
-                val feedingTaskIds = feedingTasks.map { it.id }.toSet()
+                state = listState,
+                modifier = Modifier
+                    .padding(inner)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(orderedTagMeta, key = { it.tag.id }) { meta ->
+                    val tag = meta.tag
+                    // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
+                    // (le sovrapposizioni contano una sola volta)
+                    val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
+                    val feedingTaskIds = feedingTasks.map { it.id }.toSet()
 
-                val closedIntervals = state.taskSessions
-                    .asSequence()
-                    .filter { feedingTaskIds.contains(it.taskId) }
-                    .map { Interval(it.startTs, it.endTs) }
-                    .toList()
+                    val closedIntervals = state.taskSessions
+                        .asSequence()
+                        .filter { feedingTaskIds.contains(it.taskId) }
+                        .map { Interval(it.startTs, it.endTs) }
+                        .toList()
 
-                val openIntervals = feedingTasks
-                    .asSequence()
-                    .filter { it.isRunning && it.lastStartedAtMs != null }
-                    .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
-                    .toList()
+                    val openIntervals = feedingTasks
+                        .asSequence()
+                        .filter { it.isRunning && it.lastStartedAtMs != null }
+                        .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
+                        .toList()
 
-                val shownMs = unionDurationMs(closedIntervals + openIntervals)
+                    val shownMs = unionDurationMs(closedIntervals + openIntervals)
 
-                val runningCount = feedingTasks.count { it.isRunning }
-                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
+                    val runningCount = feedingTasks.count { it.isRunning }
+                    val runningText = if (runningCount > 0) "In corso • $runningCount task" else ""
 
-                val sharedTagIds = feedingTasks
-                    .asSequence()
-                    .flatMap { it.tagIds.asSequence() }
-                    .filter { it != tag.id }
-                    .toSet()
-                    .intersect(visibleTags.map { it.id }.toSet())
-                val sharedCount = sharedTagIds.size
+                    val sharedTagIds = feedingTasks
+                        .asSequence()
+                        .flatMap { it.tagIds.asSequence() }
+                        .filter { it != tag.id }
+                        .toSet()
+                        .intersect(visibleTags.map { it.id }.toSet())
+                    val sharedCount = sharedTagIds.size
 
-                val dismissState = rememberSwipeToDismissBoxState(
-                    confirmValueChange = { value ->
-                        when (value) {
-                            SwipeToDismissBoxValue.StartToEnd -> {
-                                // Swipe right -> edit
-                                editingTagId = tag.id
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            when (value) {
+                                SwipeToDismissBoxValue.StartToEnd -> {
+                                    // Swipe right -> edit
+                                    editingTagId = tag.id
+                                }
+                                SwipeToDismissBoxValue.EndToStart -> {
+                                    // Swipe left -> trash (with semantics prompt)
+                                    deletingTagId = tag.id
+                                }
+                                else -> Unit
                             }
-                            SwipeToDismissBoxValue.EndToStart -> {
-                                // Swipe left -> trash (with semantics prompt)
-                                deletingTagId = tag.id
-                            }
-                            else -> Unit
+                            // Keep the item in-place; state changes will drive recomposition.
+                            false
                         }
-                        // Keep the item in-place; state changes will drive recomposition.
-                        false
-                    }
-                )
+                    )
 
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !removingTagIds.contains(tag.id),
-                    enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
-                        fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
-                    exit = shrinkVertically(animationSpec = tween(800, easing = FastOutSlowInEasing)) +
-                        fadeOut(animationSpec = tween(800, easing = FastOutSlowInEasing))
-                ) {
-                    SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                        val bgColor = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
-                            SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
-                            else -> Color.Transparent
-                        }
-                        val label = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
-                            SwipeToDismissBoxValue.EndToStart -> "TRASH"
-                            else -> ""
-                        }
-                        val alignment = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                            SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                            else -> Alignment.Center
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 64.dp)
-                                .background(bgColor),
-                            contentAlignment = alignment
-                        ) {
-                            if (label.isNotBlank()) {
-                                Text(
-                                    text = label,
-                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(horizontal = 14.dp)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !removingTagIds.contains(tag.id),
+                        enter = expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+                            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+                        exit = shrinkVertically(animationSpec = tween(800, easing = FastOutSlowInEasing)) +
+                            fadeOut(animationSpec = tween(800, easing = FastOutSlowInEasing))
+                    ) {
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                                val bgColor = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
+                                    SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
+                                    else -> Color.Transparent
+                                }
+                                val label = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
+                                    SwipeToDismissBoxValue.EndToStart -> "TRASH"
+                                    else -> ""
+                                }
+                                val alignment = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                    else -> Alignment.Center
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 64.dp)
+                                        .background(bgColor),
+                                    contentAlignment = alignment
+                                ) {
+                                    if (label.isNotBlank()) {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(horizontal = 14.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            content = {
+                                TagRow(
+                                    color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
+                                    tag = tag,
+                                    shownMs = shownMs,
+                                    runningText = runningText,
+                                    highlightRunning = runningCount > 0,
+                                    sharedCount = sharedCount,
+                                    showSeconds = showSeconds,
+                                    hideHoursIfZero = hideHoursIfZero,
+                                    onOpen = { openedTagId = tag.id }
                                 )
                             }
-                        }
-                        },
-                    ) {
-                        TagRow(
-                            color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
-                            tag = tag,
-                            shownMs = shownMs,
-                            runningText = runningText,
-                            highlightRunning = runningCount > 0,
-                            sharedCount = sharedCount,
-                            showSeconds = showSeconds,
-                            hideHoursIfZero = hideHoursIfZero,
-                            onOpen = { openedTagId = tag.id }
                         )
-                    }
                     }
                 }
             }
-        }
 
-            val showScrollToTop = listState.firstVisibleItemIndex > 0
+            val showScrollToTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
             androidx.compose.animation.AnimatedVisibility(
                 visible = showScrollToTop,
                 enter = fadeIn(animationSpec = tween(150)),
@@ -375,7 +376,7 @@ fun TagsScreen(
                             items(tasksWithTag, key = { it.id }) { task ->
                                 val ms = engine.displayMs(task.totalMs, task.lastStartedAtMs, state.nowMs)
                                 val dot = if (task.isRunning) "🟢" else "⚪"
-                                Text("$dot ${task.name} — ${formatDuration(ms, showSeconds)}")
+                                Text("$dot ${task.name} — ${formatDuration(ms, showSeconds, hideHoursIfZero)}")
                             }
                         }
                     }
@@ -411,11 +412,11 @@ fun TagsScreen(
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(t.name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
-                                        Text("id=${t.id}", style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+                                        Text(t.name, style = MaterialTheme.typography.titleMedium)
+                                        Text("id=${t.id}", style = MaterialTheme.typography.labelSmall)
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Button(onClick = { onRestoreTag(t.id) }) { Text("Ripristina") }
@@ -478,5 +479,4 @@ fun TagsScreen(
             deletingTagId = null
         }
     }
-
-@Composable
+}
