@@ -1,4 +1,4 @@
-// v2
+// v3
 package com.example.multitimetracker.persistence
 
 import android.content.Context
@@ -50,7 +50,7 @@ object UiPrefsStore {
 
     fun getHideHoursIfZero(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_HIDE_HOURS_IF_ZERO, true)
+            .getBoolean(KEY_HIDE_HOURS_IF_ZERO, false)
 
     fun setHideHoursIfZero(context: Context, value: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -58,4 +58,5 @@ object UiPrefsStore {
             .putBoolean(KEY_HIDE_HOURS_IF_ZERO, value)
             .apply()
     }
+
 }

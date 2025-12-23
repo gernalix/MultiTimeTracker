@@ -656,9 +656,9 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = showSeconds,
                             onCheckedChange = { checked ->
-                                showSeconds = checked
+                                onShowSecondsChange(checked)
                                 UiPrefsStore.setShowSeconds(context, checked)
-                                showSeconds = checked
+                                onShowSecondsChange(checked)
                             }
                         )
                     }
@@ -672,7 +672,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = hideHoursIfZero,
                             onCheckedChange = { checked ->
-                                hideHoursIfZero = checked
+                                onHideHoursIfZeroChange(checked)
                                 onHideHoursIfZeroChange(checked)
                             }
                         )
