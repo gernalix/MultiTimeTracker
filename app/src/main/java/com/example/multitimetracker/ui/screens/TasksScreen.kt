@@ -1,4 +1,4 @@
-// v43
+// v44
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -654,9 +654,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = showSeconds,
                             onCheckedChange = { checked ->
-                                showSeconds = checked
-                                UiPrefsStore.setShowSeconds(context, checked)
-                                showSeconds = checked
+                                onShowSecondsChange(checked)
                             }
                         )
                     }
@@ -670,7 +668,6 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = hideHoursIfZero,
                             onCheckedChange = { checked ->
-                                hideHoursIfZero = checked
                                 onHideHoursIfZeroChange(checked)
                             }
                         )

@@ -1,4 +1,4 @@
-// v21
+// v22
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -166,59 +166,55 @@ fun TagsScreen(
     }
 
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .padding(inner)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(orderedTagMeta, key = { it.tag.id }) { meta ->
-                val tag = meta.tag
-                // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
-                // (le sovrapposizioni contano una sola volta)
-                val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
-                val feedingTaskIds = feedingTasks.map { it.id }.toSet()
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .padding(inner)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(orderedTagMeta, key = { it.tag.id }) { meta ->
+        val tag = meta.tag
+        // Totale tag = UNION cronologica delle sessioni dei task che *attualmente* hanno questo tag.
+        // (le sovrapposizioni contano una sola volta)
+        val feedingTasks = visibleTasks.filter { it.tagIds.contains(tag.id) }
+        val feedingTaskIds = feedingTasks.map { it.id }.toSet()
 
-                val closedIntervals = state.taskSessions
-                    .asSequence()
-                    .filter { feedingTaskIds.contains(it.taskId) }
-                    .map { Interval(it.startTs, it.endTs) }
-                    .toList()
+        val closedIntervals = state.taskSessions
+            .asSequence()
+            .filter { feedingTaskIds.contains(it.taskId) }
+            .map { Interval(it.startTs, it.endTs) }
+            .toList()
 
-                val openIntervals = feedingTasks
-                    .asSequence()
-                    .filter { it.isRunning && it.lastStartedAtMs != null }
-                    .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
-                    .toList()
+        val openIntervals = feedingTasks
+            .asSequence()
+            .filter { it.isRunning && it.lastStartedAtMs != null }
+            .map { Interval(it.lastStartedAtMs!!, state.nowMs) }
+            .toList()
 
-                val shownMs = unionDurationMs(closedIntervals + openIntervals)
+        val shownMs = unionDurationMs(closedIntervals + openIntervals)
 
-                val runningCount = feedingTasks.count { it.isRunning }
-                val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
+        val runningCount = feedingTasks.count { it.isRunning }
+        val runningText = if (runningCount > 0) "In corso • ${runningCount} task" else ""
 
-                val sharedTagIds = feedingTasks
-                    .asSequence()
-                    .flatMap { it.tagIds.asSequence() }
-                    .filter { it != tag.id }
-                    .toSet()
-                    .intersect(visibleTags.map { it.id }.toSet())
-                val sharedCount = sharedTagIds.size
-
+        val sharedTagIds = feedingTasks
+            .asSequence()
+            .flatMap { it.tagIds.asSequence() }
+            .filter { it != tag.id }
+            .toSet()
+            .intersect(visibleTags.map { it.id }.toSet())
+        val sharedCount = sharedTagIds.size
                 val dismissState = rememberSwipeToDismissBoxState(
                     confirmValueChange = { value ->
                         when (value) {
                             SwipeToDismissBoxValue.StartToEnd -> {
-                                // Swipe right -> edit
                                 editingTagId = tag.id
                             }
                             SwipeToDismissBoxValue.EndToStart -> {
-                                // Swipe left -> trash (with semantics prompt)
                                 deletingTagId = tag.id
                             }
                             else -> Unit
                         }
-                        // Keep the item in-place; state changes will drive recomposition.
                         false
                     }
                 )
@@ -233,37 +229,37 @@ fun TagsScreen(
                     SwipeToDismissBox(
                         state = dismissState,
                         backgroundContent = {
-                        val bgColor = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D) // giallo
-                            SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2) // rosso
-                            else -> Color.Transparent
-                        }
-                        val label = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
-                            SwipeToDismissBoxValue.EndToStart -> "TRASH"
-                            else -> ""
-                        }
-                        val alignment = when (dismissState.dismissDirection) {
-                            SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                            SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                            else -> Alignment.Center
-                        }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 64.dp)
-                                .background(bgColor),
-                            contentAlignment = alignment
-                        ) {
-                            if (label.isNotBlank()) {
-                                Text(
-                                    text = label,
-                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.padding(horizontal = 14.dp)
-                                )
+                            val bgColor = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
+                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
+                                else -> Color.Transparent
+                            }
+                            val label = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> "MODIFICA"
+                                SwipeToDismissBoxValue.EndToStart -> "TRASH"
+                                else -> ""
+                            }
+                            val alignment = when (dismissState.dismissDirection) {
+                                SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                                else -> Alignment.Center
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 64.dp)
+                                    .background(bgColor),
+                                contentAlignment = alignment
+                            ) {
+                                if (label.isNotBlank()) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(horizontal = 14.dp)
+                                    )
+                                }
                             }
                         }
-                        },
                     ) {
                         TagRow(
                             color = tagColors[tag.id] ?: tagColorFromSeed(tag.id.toString()),
@@ -277,32 +273,30 @@ fun TagsScreen(
                             onOpen = { openedTagId = tag.id }
                         )
                     }
-                    }
-                }
-            }
-        }
-
-            val showScrollToTop = listState.firstVisibleItemIndex > 0
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showScrollToTop,
-                enter = fadeIn(animationSpec = tween(150)),
-                exit = fadeOut(animationSpec = tween(150)),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 92.dp)
-            ) {
-                FloatingActionButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    modifier = Modifier.size(44.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
                 }
             }
         }
     }
 
+    val showScrollToTop = listState.firstVisibleItemIndex > 0
+    androidx.compose.animation.AnimatedVisibility(
+        visible = showScrollToTop,
+        enter = fadeIn(animationSpec = tween(150)),
+        exit = fadeOut(animationSpec = tween(150)),
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 92.dp)
+    ) {
+        FloatingActionButton(
+            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+            modifier = Modifier.size(44.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ) {
+            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Scroll to top")
+        }
+    }
+}
     // Add tag
     if (showAdd) {
         AddOrRenameTagDialog(
