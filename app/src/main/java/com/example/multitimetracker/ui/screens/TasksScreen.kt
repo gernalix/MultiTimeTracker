@@ -1,4 +1,4 @@
-// v46
+// v47
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -104,6 +104,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.verticalScroll
+import com.example.multitimetracker.BuildConfig
 
 @Composable
 fun TasksScreen(
@@ -549,6 +550,8 @@ items(inactiveTasks, key = { it.id }) { task ->
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Statistiche", style = MaterialTheme.typography.titleMedium)
+                    Text("Versione: ${BuildConfig.VERSION_NAME} (patch v${BuildConfig.PATCH_VERSION})")
+                    Text("Build: ${BuildConfig.VERSION_CODE}", style = MaterialTheme.typography.bodySmall)
                     Text("Tempo totale tracciato: ${formatDuration(totalTracked, showSeconds, hideHoursIfZero)}")
                     Text("% tempo tracciato: ${"%.1f".format(trackedPct)}%")
                     Text("Tempo trascorso sull'app: ${formatDuration(appUsageShown, showSeconds, hideHoursIfZero)}")

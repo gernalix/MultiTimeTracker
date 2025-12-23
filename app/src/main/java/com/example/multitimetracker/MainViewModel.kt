@@ -1,4 +1,4 @@
-// v28
+// v29
 package com.example.multitimetracker
 
 import android.content.Context
@@ -23,6 +23,45 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private fun reconcileTagsFromSnapshot(
+    tags: List<com.example.multitimetracker.model.Tag>,
+    tagSessions: List<com.example.multitimetracker.export.TagSession>,
+    activeTaskStart: Map<Long, Long>,
+    activeTagStart: List<com.example.multitimetracker.persistence.SnapshotStore.ActiveTag>
+): Pair<List<com.example.multitimetracker.model.Tag>, Map<Long, Long>> {
+    val totalsByTagId: Map<Long, Long> = tagSessions
+        .groupBy { it.tagId }
+        .mapValues { (_, v) -> v.sumOf { (it.endTs - it.startTs).coerceAtLeast(0L) } }
+
+    val hasRunningTasks = activeTaskStart.isNotEmpty()
+    val runningStartsByTagId: Map<Long, List<Long>> =
+        if (hasRunningTasks) activeTagStart
+            .groupBy { it.tagId }
+            .mapValues { (_, v) -> v.map { it.startTs } }
+        else emptyMap()
+
+    val earliestStartByTagId: Map<Long, Long> = runningStartsByTagId
+        .mapValues { (_, starts) -> starts.minOrNull() ?: 0L }
+        .filterValues { it > 0L }
+
+    val fixedTags = tags.map { tg ->
+        val rebuiltTotal = totalsByTagId[tg.id] ?: 0L
+        val starts = runningStartsByTagId[tg.id]
+        val runningCount = starts?.size ?: 0
+        val earliest = starts?.minOrNull()
+
+        tg.copy(
+            totalMs = maxOf(tg.totalMs, rebuiltTotal),
+            activeChildrenCount = runningCount,
+            lastStartedAtMs = earliest
+        )
+    }
+
+    return fixedTags to earliestStartByTagId
+}
+
+
 
 class MainViewModel : ViewModel() {
 
@@ -100,11 +139,18 @@ class MainViewModel : ViewModel() {
         initialized = true
         appContext = context.applicationContext
 
-        val snap = SnapshotStore.load(context)
+                val snap = SnapshotStore.load(context)
         if (snap != null) {
+            val (fixedTags, fixedActiveTagStartByTagId) = reconcileTagsFromSnapshot(
+                tags = snap.tags,
+                tagSessions = snap.tagSessions,
+                activeTaskStart = snap.activeTaskStart,
+                activeTagStart = snap.activeTagStart
+            )
+
             engine.importRuntimeSnapshot(
                 tasks = snap.tasks,
-                tags = snap.tags,
+                tags = fixedTags,
                 taskSessionsSnapshot = snap.taskSessions,
                 tagSessionsSnapshot = snap.tagSessions,
                 snapshot = TimeEngine.RuntimeSnapshot(
@@ -115,9 +161,10 @@ class MainViewModel : ViewModel() {
             _state.update {
                 it.copy(
                     tasks = snap.tasks,
-                    tags = snap.tags,
+                    tags = fixedTags,
                     taskSessions = snap.taskSessions,
                     tagSessions = snap.tagSessions,
+                    activeTagStart = fixedActiveTagStartByTagId,
                     appUsageMs = snap.appUsageMs,
                     appUsageRunningSinceMs = null,
                     installAtMs = snap.installAtMs,
@@ -128,6 +175,7 @@ class MainViewModel : ViewModel() {
             scheduleAutoBackup()
             return
         }
+
 
         // Fresh install (or no snapshot yet): start clean.
         _state.update {
