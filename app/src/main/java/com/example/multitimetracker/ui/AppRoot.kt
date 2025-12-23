@@ -1,4 +1,4 @@
-// v10
+// v11
 package com.example.multitimetracker.ui
 
 import androidx.compose.foundation.layout.padding
@@ -35,6 +35,7 @@ fun AppRoot(
     val context = LocalContext.current
     val state by vm.state.collectAsState()
     val showSeconds = rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
+    val hideHoursIfZero = rememberSaveable { mutableStateOf(UiPrefsStore.getHideHoursIfZero(context)) }
 
     VarTabScaffold(
         state = state,
@@ -42,9 +43,14 @@ fun AppRoot(
         focusTaskId = focusTaskId,
         onFocusConsumed = onFocusConsumed,
         showSeconds = showSeconds.value,
+        hideHoursIfZero = hideHoursIfZero.value,
         onShowSecondsChange = {
             showSeconds.value = it
             UiPrefsStore.setShowSeconds(context, it)
+        },
+        onHideHoursIfZeroChange = {
+            hideHoursIfZero.value = it
+            UiPrefsStore.setHideHoursIfZero(context, it)
         }
     )
 }
@@ -57,6 +63,9 @@ private fun VarTabScaffold(
     onFocusConsumed: () -> Unit,
     showSeconds: Boolean,
     onShowSecondsChange: (Boolean) -> Unit
+,
+    hideHoursIfZero: Boolean,
+    onHideHoursIfZeroChange: (Boolean) -> Unit
 ) {
     remember { mutableStateOf(Tab.TASKS) }.let { tabState ->
         val tab = tabState.value
@@ -98,7 +107,9 @@ private fun VarTabScaffold(
                         externalFocusTaskId = focusTaskId,
                         onExternalFocusConsumed = onFocusConsumed,
                         showSeconds = showSeconds,
-                        onShowSecondsChange = onShowSecondsChange
+                        onShowSecondsChange = onShowSecondsChange,
+                        hideHoursIfZero = hideHoursIfZero,
+                        onHideHoursIfZeroChange = onHideHoursIfZeroChange
                     )
                 }
                 Tab.TAGS -> stateHolder.SaveableStateProvider("tags") {
@@ -110,7 +121,8 @@ private fun VarTabScaffold(
                         onDeleteTag = vm::deleteTag,
                         onRestoreTag = vm::restoreTag,
                         onPurgeTag = vm::purgeTag,
-                        showSeconds = showSeconds
+                        showSeconds = showSeconds,
+                        hideHoursIfZero = hideHoursIfZero
                     )
                 }
             }

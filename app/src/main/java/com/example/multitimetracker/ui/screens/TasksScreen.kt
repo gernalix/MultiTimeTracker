@@ -1,4 +1,4 @@
-// v42
+// v43
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -118,6 +118,8 @@ fun TasksScreen(
     onSetBackupRootFolder: (Context, Uri) -> Unit,
     showSeconds: Boolean,
     onShowSecondsChange: (Boolean) -> Unit,
+    hideHoursIfZero: Boolean,
+    onHideHoursIfZeroChange: (Boolean) -> Unit,
     externalFocusTaskId: Long? = null,
     onExternalFocusConsumed: () -> Unit = {}
 ) {
@@ -145,7 +147,6 @@ fun TasksScreen(
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
     var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
-    var hideHoursIfZero by rememberSaveable { mutableStateOf(UiPrefsStore.getHideHoursIfZero(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -582,6 +583,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                 nowMs = state.nowMs,
                 sessions = state.taskSessions.filter { it.taskId == openId },
                 showSeconds = showSeconds,
+                hideHoursIfZero = hideHoursIfZero,
                 onDismiss = { openedTaskId = null }
             )
         } else {
@@ -669,7 +671,7 @@ items(inactiveTasks, key = { it.id }) { task ->
                             checked = hideHoursIfZero,
                             onCheckedChange = { checked ->
                                 hideHoursIfZero = checked
-                                UiPrefsStore.setHideHoursIfZero(context, checked)
+                                onHideHoursIfZeroChange(checked)
                             }
                         )
                     }
@@ -924,6 +926,7 @@ private fun TaskHistoryDialog(
     nowMs: Long,
     sessions: List<TaskSession>,
     showSeconds: Boolean,
+    hideHoursIfZero: Boolean,
     onDismiss: () -> Unit
 ) {
     val engine = remember { TimeEngine() }

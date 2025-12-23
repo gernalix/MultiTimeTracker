@@ -1,4 +1,4 @@
-// v17
+// v18
 package com.example.multitimetracker.ui.components
 
 import androidx.compose.foundation.background
@@ -33,6 +33,7 @@ fun TagRow(
     highlightRunning: Boolean,
     sharedCount: Int,
     showSeconds: Boolean = true,
+    hideHoursIfZero: Boolean = false,
     onOpen: () -> Unit
 ) {
     val nameBg = color.copy(alpha = 0.35f)

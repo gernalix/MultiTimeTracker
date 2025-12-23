@@ -1,4 +1,4 @@
-// v20
+// v21
 package com.example.multitimetracker.ui.screens
 import com.example.multitimetracker.ui.theme.tagColorFromSeed
 
@@ -99,7 +99,8 @@ fun TagsScreen(
     onDeleteTag: (Long, Boolean) -> Unit,
     onRestoreTag: (Long) -> Unit,
     onPurgeTag: (Long) -> Unit,
-    showSeconds: Boolean
+    showSeconds: Boolean,
+    hideHoursIfZero: Boolean
 ) {
     var deletingTagId by remember { mutableStateOf<Long?>(null) }
     var showTrash by remember { mutableStateOf(false) }
@@ -475,7 +476,6 @@ fun TagsScreen(
             deletingTagId = null
         }
     }
-}
 
 @Composable
 private fun AddOrRenameTagDialog(
