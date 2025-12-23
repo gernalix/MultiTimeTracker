@@ -1,4 +1,4 @@
-// v44
+// v45
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -66,6 +66,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.Divider
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -148,7 +149,6 @@ fun TasksScreen(
     // View prefs for inactive tasks (persisted).
     var hideInactiveTime by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTime(context)) }
     var hideInactiveTags by rememberSaveable { mutableStateOf(UiPrefsStore.getHideInactiveTags(context)) }
-    var showSeconds by rememberSaveable { mutableStateOf(UiPrefsStore.getShowSeconds(context)) }
 
     // Smooth removal animation for swipe-to-trash.
     var removingTaskIds by remember { mutableStateOf(setOf<Long>()) }
@@ -316,7 +316,19 @@ fun TasksScreen(
             }
 
             
-            if (runningTasks.isNotEmpty()) {
+            SectionHeader(
+                title = "Task attivi",
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+
+            if (runningTasks.isEmpty()) {
+                Text(
+                    text = "—",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            } else {
                 ActiveTasksMinimalPanel(
                     tasks = runningTasks,
                     allTags = visibleTags,
@@ -329,6 +341,8 @@ fun TasksScreen(
                 )
             }
 
+            Spacer(Modifier.height(6.dp))
+
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
@@ -338,110 +352,8 @@ fun TasksScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     
-                    item(key = "header_active") {
-                        Text(
-                            text = "Task attivi",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
-
-                    if (runningTasks.isEmpty()) {
-                        item(key = "no_active") {
-                            Text(
-                                text = "—",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                        }
-                    } else {
-                        items(runningTasks, key = { it.id }) { task ->
-                            val dismissState = rememberSwipeToDismissBoxState(
-                                confirmValueChange = { value ->
-                                    when (value) {
-                                        SwipeToDismissBoxValue.StartToEnd -> {
-                                            editingTaskId = task.id
-                                        }
-                                        SwipeToDismissBoxValue.EndToStart -> {
-                                            val id = task.id
-                                            val taskName = task.name
-                                            deletingTaskId = id
-                                            deletingTaskName = taskName
-                                            showDeleteTaskConfirm = true
-                                        }
-                                        else -> Unit
-                                    }
-                                    false
-                                }
-                            )
-                            SwipeToDismissBox(
-                        state = dismissState,
-                        backgroundContent = {
-                                    val bg = when (dismissState.dismissDirection) {
-                                        SwipeToDismissBoxValue.StartToEnd -> Color(0xFFFFF59D)
-                                        SwipeToDismissBoxValue.EndToStart -> Color(0xFFFFCDD2)
-                                        else -> Color.Transparent
-                                    }
-                                    val label = when (dismissState.dismissDirection) {
-                                        SwipeToDismissBoxValue.StartToEnd -> "Edit"
-                                        SwipeToDismissBoxValue.EndToStart -> "Delete"
-                                        else -> ""
-                                    }
-                                    val alignment = when (dismissState.dismissDirection) {
-                                        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                                        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-                                        else -> Alignment.Center
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(bg)
-                                            .padding(vertical = 2.dp),
-                                        contentAlignment = alignment
-                                    ) {
-                                        if (label.isNotBlank()) {
-                                            Text(
-                                                text = label,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                modifier = Modifier.padding(horizontal = 14.dp)
-                                            )
-                                        }
-                                    }
-                                },
-                                content = {
-                                    val highlightThis = highlightTaskId == task.id
-                                    TaskRow(
-                                        tagColors = tagColors,
-                                        task = task,
-                                        tags = visibleTags,
-                                        nowMs = state.nowMs,
-                                        highlightRunning = false,
-                                        highlightJustCreated = highlightThis,
-                                        showTime = !hideInactiveTime,
-                                        showTags = !hideInactiveTags,
-                                        showSeconds = showSeconds,
-                                        onToggle = {
-                                            val wasRunning = task.isRunning
-                                            onToggleTask(task.id)
-                                            if (wasRunning) scope.launch { listState.animateScrollToItem(0) }
-                                        },
-                                        onLongPress = { openedTaskId = task.id },
-                                        linkText = if (task.link.isNotBlank()) "🔗" else "",
-                                        onOpenLink = { openLink(context, task.link) }
-                                    )
-                                }
-                            )
-                        }
-                    }
-
                     item(key = "header_inactive") {
-                        Text(
-                            text = "Task inattivi",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 6.dp, bottom = 4.dp)
-                        )
+                        SectionHeader(title = "Task inattivi")
                     }
 
 items(inactiveTasks, key = { it.id }) { task ->
@@ -657,8 +569,6 @@ items(inactiveTasks, key = { it.id }) { task ->
                             checked = showSeconds,
                             onCheckedChange = { checked ->
                                 onShowSecondsChange(checked)
-                                UiPrefsStore.setShowSeconds(context, checked)
-                                onShowSecondsChange(checked)
                             }
                         )
                     }
@@ -672,7 +582,6 @@ items(inactiveTasks, key = { it.id }) { task ->
                         Checkbox(
                             checked = hideHoursIfZero,
                             onCheckedChange = { checked ->
-                                onHideHoursIfZeroChange(checked)
                                 onHideHoursIfZeroChange(checked)
                             }
                         )
@@ -1290,6 +1199,23 @@ private fun openLink(context: Context, raw: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Divider()
     }
 }
 

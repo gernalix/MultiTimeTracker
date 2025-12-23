@@ -1,6 +1,6 @@
-2025-12-23 02:45:37
-version=v11
-zip=multitimer_v11.zip
+2025-12-23 03:14:12
+version=v2
+zip=multitimer_v2 (5).zip
 app_prefix=app/
 copied_files=57
 build_status=failed_exit_9009
