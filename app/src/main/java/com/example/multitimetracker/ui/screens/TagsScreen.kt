@@ -1,4 +1,4 @@
-// v11
+// v12
 package com.example.multitimetracker.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -91,7 +91,7 @@ fun TagsScreen(
                         TagRow(
                             color = color ?: MaterialTheme.colorScheme.primary,
                             tag = tag,
-                            shownMs = computeShownMs(tag, state.nowMs),
+                            shownMs = computeShownMs(tag, state.nowMs, state.activeTagStart[tag.id]),
                             runningText = if (isRunning) "🟢" else "",
                             highlightRunning = isRunning,
                             sharedCount = tag.activeChildrenCount,
@@ -247,9 +247,10 @@ fun TagsScreen(
     }
 }
 
-private fun computeShownMs(tag: Tag, nowMs: Long): Long {
-    // totalMs already includes closed sessions; if running, add the ongoing delta
-    val start = tag.lastStartedAtMs
+private fun computeShownMs(tag: Tag, nowMs: Long, activeStartMs: Long?): Long {
+    // totalMs already includes closed sessions; if running, add the ongoing delta.
+    // Tags can be running either via tag.lastStartedAtMs OR via activeTagStart (task-driven tag running).
+    val start = tag.lastStartedAtMs ?: activeStartMs
     return if (start != null) {
         tag.totalMs + (nowMs - start).coerceAtLeast(0L)
     } else {
