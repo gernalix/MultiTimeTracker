@@ -1,4 +1,4 @@
-// v12
+// v13
 package com.example.multitimetracker.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -84,6 +84,9 @@ fun TagsScreen(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(visibleTags, key = { it.id }) { tag ->
+            val runningStart = state.activeTagStart[tag.id]
+            val runningDeltaMs = if (runningStart != null) (state.nowMs - runningStart).coerceAtLeast(0L) else 0L
+            val displayedMs = tag.totalMs + runningDeltaMs
                     val isRunning = tag.lastStartedAtMs != null || state.activeTagStart.containsKey(tag.id)
                     val color = colors[tag.id]
 

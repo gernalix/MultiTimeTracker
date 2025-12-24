@@ -15,9 +15,9 @@ android {
         applicationId = "com.example.multitimetracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
-        buildConfigField("int", "PATCH_VERSION", "10")
+        versionCode = 3
+        versionName = "1.0.2"
+        buildConfigField("int", "PATCH_VERSION", "13")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
