@@ -1,4 +1,4 @@
-// v14
+// v15
 package com.example.multitimetracker.model
 
 import com.example.multitimetracker.export.TaskSession
@@ -120,16 +120,6 @@ class TimeEngine {
         if (idx < 0) return EngineResult(tasks, tags)
 
         val task = tasks[idx]
-        val old = task.tagIds
-        val removed = old - newTagIds
-        val added = newTagIds - old
-
-        var newTags = tags
-
-        if (task.isRunning) {
-            removed.forEach { tagId -> newTags = stopTagForTask(task, newTags, tagId, nowMs) }
-            added.forEach { tagId -> newTags = startTagForTask(task, newTags, tagId, nowMs) }
-        }
 
         val updatedTask = task.copy(
             name = (newName ?: task.name).trim().ifEmpty { task.name },
@@ -137,6 +127,13 @@ class TimeEngine {
             link = newLink ?: task.link
         )
         val newTasks = tasks.toMutableList().also { it[idx] = updatedTask }.toList()
+
+        // Retroactive tags: rebuild historical tag sessions for this task every time its tag set changes.
+        // This ensures tag totals update immediately when tags are added/removed on tasks that already have time.
+        rebuildTagSessionsForTask(task = updatedTask, tasks = newTasks, tags = tags, nowMs = nowMs)
+
+        // After rebuilding tagSessions, recompute tag totals so UI/export match the regenerated history.
+        val newTags = recomputeAllTagTotals(tags = tags, tasks = newTasks, nowMs = nowMs)
 
         return EngineResult(newTasks, newTags)
     }
@@ -256,9 +253,111 @@ class TimeEngine {
             } else task
         }
 
-        // When a task is deleted, it should not keep tag counters running.
-        // stopTask already closed tag sessions if it was running.
-        return EngineResult(newTasks, stopped.tags)
+        // IMPORTANT: tag totals must update when a task is deleted (active or not).
+        // We keep the historical tagSessions/taskSessions (so a future "restore" can bring them back),
+        // but tag totals are computed only from sessions belonging to NON-deleted tasks.
+        val newTags = recomputeAllTagTotals(tags = stopped.tags, tasks = newTasks, nowMs = nowMs)
+
+        return EngineResult(newTasks, newTags)
+    }
+
+    /**
+     * Rebuild all TagSessions (historical) for a single task from TaskSessions, applying the CURRENT task.tagIds
+     * to the entire history.
+     *
+     * If the task is running, its active tag runtime is rebuilt to start from the task's start.
+     */
+    private fun rebuildTagSessionsForTask(
+        task: Task,
+        tasks: List<Task>,
+        tags: List<Tag>,
+        nowMs: Long
+    ) {
+        val tagNameById = tags.associate { it.id to it.name }
+
+        // 1) Remove historical tag sessions for this task.
+        tagSessions.removeAll { it.taskId == task.id }
+
+        // 2) Recreate TagSessions from the task's TaskSessions, for each current tag.
+        val relevantTaskSessions = taskSessions.filter { it.taskId == task.id }
+        task.tagIds.forEach { tagId ->
+            relevantTaskSessions.forEach { ts ->
+                tagSessions.add(
+                    TagSession(
+                        tagId = tagId,
+                        tagName = tagNameById[tagId] ?: "",
+                        taskId = ts.taskId,
+                        taskName = ts.taskName,
+                        startTs = ts.startTs,
+                        endTs = ts.endTs
+                    )
+                )
+            }
+        }
+
+        // 3) Rebuild active tag runtime for this task if it is currently running.
+        // Clear any activeTagStart entries for this task first.
+        activeTagStart.keys.filter { it.taskId == task.id }.forEach { activeTagStart.remove(it) }
+
+        if (task.isRunning) {
+            val start = activeTaskStart[task.id] ?: task.lastStartedAtMs
+            if (start != null) {
+                task.tagIds.forEach { tagId ->
+                    activeTagStart[TagKey(taskId = task.id, tagId = tagId)] = start
+                }
+            }
+        }
+
+        // Safety: if task was deleted, ensure no active runtime is kept.
+        val isDeleted = tasks.firstOrNull { it.id == task.id }?.isDeleted == true
+        if (isDeleted) {
+            activeTaskStart.remove(task.id)
+            activeTagStart.keys.filter { it.taskId == task.id }.forEach { activeTagStart.remove(it) }
+        }
+    }
+
+    /**
+     * Recompute *all* tag totals from tagSessions + active runtime, excluding sessions belonging to deleted tasks.
+     * This is called after retroactive regeneration and after task delete/restore/purge operations.
+     */
+    private fun recomputeAllTagTotals(
+        tags: List<Tag>,
+        tasks: List<Task>,
+        nowMs: Long
+    ): List<Tag> {
+        val taskById = tasks.associateBy { it.id }
+        val isTaskActiveAndNotDeleted: (Long) -> Boolean = { taskId ->
+            val t = taskById[taskId]
+            t != null && !t.isDeleted
+        }
+
+        // Base totals from closed sessions.
+        val totalsByTag = mutableMapOf<Long, Long>()
+        tagSessions.forEach { s ->
+            if (!isTaskActiveAndNotDeleted(s.taskId)) return@forEach
+            val delta = (s.endTs - s.startTs).coerceAtLeast(0L)
+            totalsByTag[s.tagId] = (totalsByTag[s.tagId] ?: 0L) + delta
+        }
+
+        // Active runtime from activeTagStart.
+        val activeStartsByTag = mutableMapOf<Long, MutableList<Long>>()
+        activeTagStart.forEach { (k, start) ->
+            if (!isTaskActiveAndNotDeleted(k.taskId)) return@forEach
+            val delta = (nowMs - start).coerceAtLeast(0L)
+            totalsByTag[k.tagId] = (totalsByTag[k.tagId] ?: 0L) + delta
+            activeStartsByTag.getOrPut(k.tagId) { mutableListOf() }.add(start)
+        }
+
+        return tags.map { tag ->
+            val activeStarts = activeStartsByTag[tag.id]
+            val activeCount = activeStarts?.size ?: 0
+            val earliest = activeStarts?.minOrNull()
+            tag.copy(
+                totalMs = totalsByTag[tag.id] ?: 0L,
+                activeChildrenCount = activeCount,
+                lastStartedAtMs = earliest
+            )
+        }
     }
 
     fun deleteTag(

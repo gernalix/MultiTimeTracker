@@ -1,4 +1,4 @@
-// v1
+// v2
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,9 +15,9 @@ android {
         applicationId = "com.example.multitimetracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
-        buildConfigField("int", "PATCH_VERSION", "13")
+        versionCode = 4
+        versionName = "1.0.3"
+        buildConfigField("int", "PATCH_VERSION", "14")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,7 +1,7 @@
-2025-12-23 12:51:23
-version=v13
-zip=multitimer_v13.zip
+2025-12-24 15:40:04
+version=v6
+zip=multitimer_v6 (5).zip
 app_prefix=app/
-copied_files=59
+copied_files=2
 build_status=failed_exit_9009
 apk_path=C:\Users\seste\AndroidStudioProjects\MultiTimeTracker\app\build\outputs\apk\debug\app-debug.apk
